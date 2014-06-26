@@ -34,4 +34,4 @@ We have the following conventions in our code:
 * Functions that take no arguments are declared f(void) not f().
 
 The included .dir-locals.el file will automatically set up the basic
-indentation style in Emacs.
+indentation style in Emacs.  
