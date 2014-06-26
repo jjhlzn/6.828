@@ -88,9 +88,10 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 			//output format:        kern/monitor.c:143: monitor+106
 			cprintf("       %s:%d: ", eip_debug_info.eip_file, eip_debug_info.eip_line);
 			cprintf("%.*s", eip_debug_info.eip_fn_namelen, eip_debug_info.eip_fn_name);
-			cprintf("+%u\n", *((unsigned int *)eip_debug_info.eip_fn_addr));
+			//cprintf("+%u\n", *((unsigned int *)eip_debug_info.eip_fn_addr));
+			cprintf("+%u\n", eip_debug_info.eip_fn_addr);
 		} else {
-			cprintf("error when find debug info!\n");
+			cprintf("       can't find line info!\n");
 		}
 	} while (last_ebp != 0);
 	return 0;
@@ -149,7 +150,7 @@ monitor(struct Trapframe *tf)
 
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
-
+	//mon_backtrace(0, 0, 0);
 
 	while (1) {
 		buf = readline("K> ");
