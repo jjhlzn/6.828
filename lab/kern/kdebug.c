@@ -179,7 +179,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	//	Look at the STABS documentation and <inc/stab.h> to find
 	//	which one.
 	// Your code here.
-
+	
 	
 	// Search backwards from the line number for the relevant filename
 	// stab.
