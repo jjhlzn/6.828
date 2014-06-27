@@ -80,6 +80,8 @@ static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t 
 static void *
 boot_alloc(uint32_t n)
 {
+	assert (n>=0);
+	
 	static char *nextfree;	// virtual address of next byte of free memory
 	char *result;
 
@@ -98,6 +100,14 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
+	if (n>0){
+		void *start_addr = nextfree;
+		int pages = (n + PGSIZE - 1) / PGSIZE;
+		nextfree += pages * PGSIZE;
+		return start_addr;
+	} else if (n==0){
+		return nextfree;
+	}
 
 	return NULL;
 }
@@ -121,7 +131,7 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	//panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -143,6 +153,7 @@ mem_init(void)
 	// each physical page, there is a corresponding struct Page in this
 	// array.  'npages' is the number of physical pages in memory.
 	// Your code goes here:
+	pages = (struct Page*) boot_alloc(sizeof(struct Page) * npages);
 
 
 	//////////////////////////////////////////////////////////////////////
@@ -252,6 +263,23 @@ page_init(void)
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
+	
+	//page 0
+	pages[0].pp_ref = 1;
+	pages[1].pp_link = 0;
+	
+	//IO hole [IOPHYSMEM, EXTPHYSMEM)
+	unsigned int start_addr = IOPHYSMEM;
+	struct Page *saved_page_free_list;
+	i = IOPHYSMEM / PGSIZE;
+	saved_page_free_list = pages[i].pp_link;
+	for (; start_addr < EXTPHYSMEM; start_addr += PGSIZE, i++) {
+		pages[i].pp_ref = 1;
+		pages[i].pp_link = 0;
+	}
+	pages[i].pp_link = saved_page_free_list;
+	
+	//the kernel
 }
 
 //
