@@ -104,6 +104,7 @@ boot_alloc(uint32_t n)
 		void *start_addr = nextfree;
 		int pages = (n + PGSIZE - 1) / PGSIZE;
 		nextfree += pages * PGSIZE;
+		//cprintf("boot_alloc: alloc addr = %8.8x\n", start_addr);
 		return start_addr;
 	} else if (n==0){
 		return nextfree;
@@ -240,6 +241,8 @@ mem_init(void)
 void
 page_init(void)
 {
+	extern pde_t entry_pgdir[];
+	
 	// The example code here marks all physical pages as free.
 	// However this is not truly the case.  What memory is free?
 	//  1) Mark physical page 0 as in use.
@@ -263,10 +266,12 @@ page_init(void)
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
-	
+	//cprintf("page_init: start\n");
 	//page 0
 	pages[0].pp_ref = 1;
 	pages[1].pp_link = 0;
+	
+	//cprintf("page_init: page 0 OK\n");
 	
 	//IO hole [IOPHYSMEM, EXTPHYSMEM)
 	unsigned int start_addr = IOPHYSMEM;
@@ -279,7 +284,46 @@ page_init(void)
 	}
 	pages[i].pp_link = saved_page_free_list;
 	
+	//cprintf("page_init: IO hole OK\n");
+	
 	//the kernel
+	start_addr = 0x100000;
+	i = start_addr / PGSIZE;
+	saved_page_free_list = pages[i].pp_link;
+	unsigned int end_addr = start_addr + 0x400000;
+	for (; start_addr < end_addr; start_addr += PGSIZE, i++) {
+		pages[i].pp_ref = 1;
+		pages[i].pp_link = 0;
+	}
+	pages[i].pp_link = saved_page_free_list;
+	
+	//cprintf("page_init: the kernel OK\n");
+	//TODO: kernel statck ??
+	
+	//page dir and page tables
+	start_addr = (unsigned int)&entry_pgdir[0] - KERNBASE;
+	//cprintf("entry_pgdir = %8.8x\n",&entry_pgdir[0]);
+	i = start_addr / PGSIZE;
+	saved_page_free_list = pages[i].pp_link;
+	pages[i].pp_ref = 1;
+	pages[i].pp_link = 0;
+	pages[i+1].pp_link = saved_page_free_list;
+	
+	//cprintf("page_init: Page Dir and Page Table OK\n");
+	
+	//struct Pages
+	start_addr = (unsigned int)pages - KERNBASE;
+	//cprintf("addr of pages = %8.8x\n", start_addr);
+    end_addr = start_addr + npages * sizeof(struct Page);
+	i = start_addr / PGSIZE;
+	saved_page_free_list = pages[i].pp_link;
+	for (; start_addr < end_addr; start_addr += PGSIZE, i++) {
+		pages[i].pp_ref = 1;
+		pages[i].pp_link = 0;
+	}
+	pages[i].pp_link = saved_page_free_list;
+	
+	//cprintf("page_init: struct Pages OK\n");
 }
 
 //
@@ -295,7 +339,19 @@ struct Page *
 page_alloc(int alloc_flags)
 {
 	// Fill this function in
-	return 0;
+	if (page_free_list == 0) {
+		cprintf("WARN: out of memory!\n");
+		return NULL;
+	}
+	
+	// Change page_free_list because of alloc
+	struct Page *alloc_page = page_free_list;
+	page_free_list = alloc_page->pp_link;
+	
+	// Set the page with '\0'
+	if (alloc_flags & ALLOC_ZERO)
+		memset (page2kva(alloc_page), 0, PGSIZE);
+	return alloc_page;
 }
 
 //
@@ -306,6 +362,8 @@ void
 page_free(struct Page *pp)
 {
 	// Fill this function in
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 }
 
 //
