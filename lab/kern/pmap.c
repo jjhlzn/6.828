@@ -361,7 +361,6 @@ page_alloc(int alloc_flags)
 void
 page_free(struct Page *pp)
 {
-	// Fill this function in
 	pp->pp_link = page_free_list;
 	page_free_list = pp;
 }
@@ -403,7 +402,23 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+	pde_t pde = pgdir[PDX(va)];
+	if (!(pde & PTE_P)) { //page table doesn't exist
+		if (create) {
+			struct Page *new_page = page_alloc(ALLOC_ZERO); //used as page table page
+			if (!new_page) 
+				return NULL;
+			new_page->pp_ref++;
+			pgdir[PDX(va)] = page2pa(new_page) | PTE_P | PTE_U | PTE_W;
+		} else {
+			return NULL;
+		}
+	}
+	pde = pgdir[PDX(va)];
+	//cprintf("PDX(%8.8x) = %d\n",va,PDX(va));
+	pte_t *page_table = (pte_t *)(PTE_ADDR(pde) + KERNBASE);
+	//cprintf("PTX(%8.8x) = %d\n",va,PTX(va));
+	return page_table + PTX(va);
 }
 
 //
@@ -420,6 +435,18 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+	assert(size > 0);
+	assert(size % PGSIZE == 0);
+	
+	int i;
+	pte_t *pte;
+	for (i=0; i<size/PGSIZE; i++) {
+		pte_t *pte = pgdir_walk(pgdir, (void *)(va + i * PGSIZE), 1);
+		if (pte == NULL)
+			panic("out of memory!");
+		*pte = (pa + i * PGSIZE) | perm;
+	}
+	
 }
 
 //
@@ -449,7 +476,29 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int
 page_insert(pde_t *pgdir, struct Page *pp, void *va, int perm)
 {
+	//TODO: handle the Corner-case
+	
 	// Fill this function in
+	pte_t *ptep = pgdir_walk(pgdir, va, 0);
+	//cprintf("page_insert: here1\n");
+	if (ptep && (*ptep & PTE_P)) {
+		//cprintf("pte = %8.8x\n", *ptep);
+		if (PTE_ADDR(*ptep) == page2pa(pp) ) {
+			//cprintf("has mapped\n");
+			*ptep = page2pa(pp) | perm | PTE_P;
+			return 0;
+		}
+		//cprintf("page_insert: remove\n");
+		page_remove(pgdir, va);
+		tlb_invalidate(pgdir,va);
+	} else if (!ptep) {
+		ptep = pgdir_walk(pgdir,va,1);
+		if (!ptep) {
+			return -E_NO_MEM;
+		}
+	}
+	pp->pp_ref++;
+	*ptep = page2pa(pp) | perm | PTE_P;
 	return 0;
 }
 
@@ -468,7 +517,17 @@ struct Page *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+	pte_t *pte = pgdir_walk(pgdir, va, 0);
+	if (pte == NULL)
+		return NULL;
+	
+	if (!(*pte & PTE_P))
+		return NULL;
+		
+	if (pte_store)
+		*pte_store = pte;
+	
+	return pa2page(PTE_ADDR(pte));
 }
 
 //
@@ -490,6 +549,21 @@ void
 page_remove(pde_t *pgdir, void *va)
 {
 	// Fill this function in
+	pte_t *ptep = pgdir_walk(pgdir, va, 0);
+	
+	if (ptep == NULL)
+		return;
+		
+	if (!(*ptep & PTE_P))
+		return;
+	//cprintf("page_remove: here1\n");	
+	//cprintf("pa = %8.8x\n",PTE_ADDR(*ptep));
+	struct Page *page = pa2page(PTE_ADDR(*ptep));
+	//cprintf("page_remove: here2\n");	
+	page_decref(page);
+
+	tlb_invalidate(pgdir,va);
+	*ptep = 0;
 }
 
 //
@@ -766,7 +840,7 @@ check_page(void)
 
 	// should be no free memory
 	assert(!page_alloc(0));
-
+	
 	// should be able to map pp2 at PGSIZE because it's already there
 	assert(page_insert(kern_pgdir, pp2, (void*) PGSIZE, PTE_W) == 0);
 	assert(check_va2pa(kern_pgdir, PGSIZE) == page2pa(pp2));
@@ -786,10 +860,12 @@ check_page(void)
 	assert(pp2->pp_ref == 1);
 	assert(*pgdir_walk(kern_pgdir, (void*) PGSIZE, 0) & PTE_U);
 	assert(kern_pgdir[0] & PTE_U);
+	
+	assert(!page_alloc(0));
 
 	// should not be able to map at PTSIZE because need free page for page table
 	assert(page_insert(kern_pgdir, pp0, (void*) PTSIZE, PTE_W) < 0);
-
+	
 	// insert pp1 at PGSIZE (replacing pp2)
 	assert(page_insert(kern_pgdir, pp1, (void*) PGSIZE, PTE_W) == 0);
 	assert(!(*pgdir_walk(kern_pgdir, (void*) PGSIZE, 0) & PTE_U));
