@@ -14,7 +14,7 @@ void
 i386_init(void)
 {
 	extern char edata[], end[];
-
+	
 	// Before doing anything else, complete the ELF loading process.
 	// Clear the uninitialized global data (BSS) section of our program.
 	// This ensures that all static/global variables start out zero.
@@ -25,7 +25,7 @@ i386_init(void)
 	cons_init();
 
 	cprintf("6828 decimal is %o octal!\n", 6828);
-
+	cprintf("end = %8.8x\n",end);
 	// Lab 2 memory management initialization functions
 	mem_init();
 
