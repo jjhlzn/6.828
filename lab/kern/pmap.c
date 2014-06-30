@@ -104,9 +104,9 @@ boot_alloc(uint32_t n)
 		void *start_addr = nextfree;
 		int pages = (n + PGSIZE - 1) / PGSIZE;
 		nextfree += pages * PGSIZE;
-		cprintf("boot_alloc: start free addr = %8.8x\n", start_addr);
-		cprintf("boot_alloc: alloc %d bytes, need %d pages\n", n, pages);
-		cprintf("boot_alloc: next free addr = %8.8x\n", nextfree);
+		//cprintf("boot_alloc: start free addr = %8.8x\n", start_addr);
+		//cprintf("boot_alloc: alloc %d bytes, need %d pages\n", n, pages);
+		//cprintf("boot_alloc: next free addr = %8.8x\n", nextfree);
 		return start_addr;
 	} else if (n==0){
 		return nextfree;
@@ -182,9 +182,6 @@ mem_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 	
-	//TODO: i'm not sure whether the code statify the requirment
-	//because [KERNBASE + 4M, 2^32) don't mapped, so we can't use these memory used as pagetable
-	cprintf("mem_init: here1\n");
 	int i;
 	uintptr_t upages_addr = UPAGES;
 	uintptr_t upages_end_addr = UPAGES + ROUNDUP(npages*sizeof(struct Page), PGSIZE);
@@ -194,7 +191,6 @@ mem_init(void)
 		page_insert(kern_pgdir, page, (void *)upages_addr, PTE_U);
 	}
 	
-	cprintf("mem_init: here2\n");
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
@@ -208,18 +204,16 @@ mem_init(void)
 	// Your code goes here:
 	
 	//TODO: Why two pieces? it will affect the mapping? 
+	extern char bootstack[];
+	cprintf("bootstack = %8.8x\n",bootstack);
 	uintptr_t kern_stack_addr = KSTACKTOP-KSTKSIZE;
 	for (i=0; kern_stack_addr < KSTACKTOP; i++, kern_stack_addr += PGSIZE) {
 		//cprintf("i = %d\n",i);
-		struct Page *page = page_alloc(ALLOC_ZERO); //don't set to zero
-		if (!page)
-			panic("out of memory!");
-		//cprintf("set_stack: here1\n");
+		struct Page *page = pa2page(PADDR((void *)(bootstack + i * PGSIZE))); 
 		if (page_insert(kern_pgdir, page, (void *)kern_stack_addr, PTE_W) < 0){
 			panic("page_insert error!");
 		}
 	}
-	cprintf("mem_init: here3\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -231,14 +225,13 @@ mem_init(void)
 	// Your code goes here:
 	uintptr_t kern_addr = KERNBASE;
 	phys_addr = 0;
-	for (i=0; kern_addr < 0xffffffff && kern_addr >= KERNBASE; i++, kern_addr += PGSIZE, phys_addr += PGSIZE) {
+	for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PGSIZE, phys_addr += PGSIZE) {
 		//cprintf("kern_addr = %8.8x\n",kern_addr);
 		pte_t *ptep = pgdir_walk(kern_pgdir, (void *)kern_addr, 1);
 		if (!ptep)
 			panic("out of memory!");
-		*ptep = phys_addr | PTE_W;
+		*ptep = phys_addr | PTE_W | PTE_P;
 	}
-	cprintf("mem_init: here4\n");
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -349,18 +342,9 @@ page_init(void)
 	}
 	pages[i].pp_link = saved_page_free_list;
 	
-	//start_addr = (unsigned int)&entry_pgdir[0] - KERNBASE;
-	//cprintf("entry_pgdir = %8.8x\n",&entry_pgdir[0]);
-	//i = start_addr / PGSIZE;
-	//saved_page_free_list = pages[i].pp_link;
-	//pages[i].pp_ref = 1;
-	//pages[i].pp_link = 0;
-	//pages[i+1].pp_link = saved_page_free_list;
-	//cprintf("page_init: Page Dir and Page Table OK\n");
-	
 	//struct Pages
 	start_addr = (uint32_t)pages - KERNBASE;
-	cprintf("addr of pages = %8.8x\n", (unsigned int)pages);
+	//cprintf("addr of pages = %8.8x\n", (unsigned int)pages);
     end_addr = start_addr + npages * sizeof(struct Page);
 	i = start_addr / PGSIZE;
 	saved_page_free_list = pages[i].pp_link;
@@ -370,7 +354,7 @@ page_init(void)
 	}
 	pages[i].pp_link = saved_page_free_list;
 	
-	cprintf("first free page pa = %uK\n", page2pa(page_free_list)/1024);
+	//cprintf("first free page pa = %uK\n", page2pa(page_free_list)/1024);
 	//cprintf("page_init: struct Pages OK\n");
 }
 
@@ -388,7 +372,7 @@ page_alloc(int alloc_flags)
 {
 	// Fill this function in
 	if (page_free_list == 0) {
-		cprintf("WARN: out of memory!\n");
+		//cprintf("WARN: out of memory!\n");
 		return NULL;
 	}
 	
@@ -788,16 +772,17 @@ check_kern_pgdir(void)
 
 	pgdir = kern_pgdir;
     
-    cprintf("check_kern_pgdir: here1\n");
 	// check pages array
 	n = ROUNDUP(npages*sizeof(struct Page), PGSIZE);
 	for (i = 0; i < n; i += PGSIZE)
 		assert(check_va2pa(pgdir, UPAGES + i) == PADDR(pages) + i);
-	cprintf("check_kern_pgdir: here2\n");
 	
 	// check phys mem
-	for (i = 0; i < npages * PGSIZE; i += PGSIZE)
+	for (i = 0; i < npages * PGSIZE; i += PGSIZE) {
+		//cprintf("i = %d\n",i);
+		//cprintf("pa = %8.8x\n",check_va2pa(pgdir, KERNBASE + i));
 		assert(check_va2pa(pgdir, KERNBASE + i) == i);
+	}
 
 	// check kernel stack
 	for (i = 0; i < KSTKSIZE; i += PGSIZE)
