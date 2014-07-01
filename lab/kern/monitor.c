@@ -10,9 +10,12 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
+static void get_pte_permission_desc(uint16_t pte_permission, char *msg);
+static void show_pte_mappings(int pdx);
 
 struct Command {
 	const char *name;
@@ -24,6 +27,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "showmappings", "Display virtual memory mapping", mon_showmappings }
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -54,6 +58,156 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	cprintf("Kernel executable memory footprint: %dKB\n",
 		(end-entry+1023)/1024);
 	return 0;
+}
+
+int 
+mon_showmappings(int argc, char **argv, struct Trapframe *tf)
+{
+	//check parameters
+	if (argc != 3 && argc != 1) {
+		cprintf("usage: showmappings or showmappings start_addr end_addr\n");
+		return -1;
+	}
+	
+	uint32_t from_addr, end_addr;
+	if (argc == 0) {
+		from_addr = 0;
+		end_addr = 0xffffffff;
+	} else if (argc == 2) {
+		//TODO: parse parameters
+		panic("not implemented!\n");
+		return -1;
+	}
+	
+	extern pde_t *kern_pgdir;
+	int i,j;
+	for (i=PDX(from_addr); i<=PDX(end_addr); ) {
+		int start_pdx = i, end_pdx;
+		uint16_t pde_permission;
+		
+		if (kern_pgdir[i] & PTE_P) {
+			end_pdx = i;
+			pde_permission = kern_pgdir[i] & 0xfff;
+		} else {
+			i++;
+			continue;
+		}
+		
+		//find the continuous dpes which have the same permission, and their pte's permission
+		//should be the same.
+		uint16_t pte_permission = 0;
+		for (j=i; j<=PDX(end_addr); j++) {
+			if ( (kern_pgdir[j] & PTE_P) && ((kern_pgdir[j] & 0xfff) == pde_permission)) {
+				end_pdx = j;
+				
+				//check whether pte has the same permisson 
+				int k;
+				for (k=0; k<NPTENTRIES; k++) {
+					pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
+					assert(ptep);
+					if (j == i && k == 0) {
+						pte_permission = *ptep & 0xfff;
+						continue;
+					}
+					if ( (*ptep & 0xfff) != pte_permission  ) 
+						break;
+				}
+			} else {
+				break;
+			}
+		}
+		
+		//pde show format:
+		//[from_virtual-end_virtual]  PDE[from_index-end_index]      --------(privilege bits)
+		
+		assert(start_pdx <= end_pdx);
+		char permission_desc[10];
+		get_pte_permission_desc(pde_permission, permission_desc);
+		if (start_pdx < end_pdx) {
+			cprintf("[%5.5x-%5.5x]  PDE[%3.3x-%3.3x] %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
+				    , (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, end_pdx, permission_desc);
+				    
+			//in this case, the pte's permission should be the the same.
+			int k;
+			for (k=start_pdx; k<=end_pdx; k++)
+				show_pte_mappings(k);
+		} else {
+			cprintf("[%5.5x-%5.5x]  PDE[%3.3x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
+				    , (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, permission_desc);
+			show_pte_mappings(start_pdx);
+		}
+		
+		
+		
+		i = end_pdx + 1;
+	}
+	
+	return 0;
+}
+
+static void
+get_pte_permission_desc(uint16_t pte_permission, char *msg)
+{
+	snprintf(msg,
+			 10,
+			 "%c%c%c%c%c%c%c%c%c",
+			 pte_permission & PTE_G ? 'G' : '-',
+			 pte_permission & PTE_PS ? 'P' : '-',
+			 pte_permission & PTE_D  ? 'D' : '-',
+			 pte_permission & PTE_A  ? 'A' : '-',
+			 pte_permission & PTE_PCD  ? 'C' : '-',
+			 pte_permission & PTE_PWT  ? 'T' : '-',
+			 pte_permission & PTE_U  ? 'U' : '-',
+			 pte_permission & PTE_W  ? 'W' : '-',
+			 pte_permission & PTE_P  ? 'P' : '-'
+			 );
+}
+
+static void
+show_pte_mappings(int pdx) 
+{
+	extern pde_t *kern_pgdir;
+	uintptr_t base_addr = pdx * PTSIZE;
+	uint16_t pte_permission;
+	int k;
+	for (k=0; k<NPTENTRIES; k++) {
+		int start_ptx = k, end_ptx;
+		physaddr_t from_addr, end_addr;
+		
+		pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + k * PGSIZE), 0);
+		assert(ptep);
+		
+		if (!(*ptep & PTE_P))
+			continue;
+			
+		from_addr = PTE_ADDR(*ptep);
+		pte_permission = *ptep & 0xfff;
+		
+		int n;
+		for (n=k+1; n<NPTENTRIES; n++) {
+			pte_t ptep2 = *pgdir_walk(kern_pgdir, (void *)(base_addr + n * PGSIZE), 0);
+			if ( (ptep2 & 0xfff) != pte_permission )
+				break;
+		}
+		
+		end_ptx = n-1;
+		end_addr = PTE_ADDR(*pgdir_walk(kern_pgdir, (void *)(base_addr + end_ptx * PGSIZE), 0));
+		//pte show format:
+		// [from_virtual-end_virtual] PTE[from_index-end_index] -------- from_phys-end_phys
+		char permission_desc[10];
+		get_pte_permission_desc(pte_permission, permission_desc);
+		if (start_ptx < end_ptx) {
+			cprintf(" [%5.5x-%5.5x] PTE[%3.3x-%3.3x] %s\n %5.5x-%5.5x", (uint32_t)(base_addr + start_ptx * PGSIZE) >> PGSHIFT,
+				(uint32_t)(base_addr + end_ptx * PGSIZE) >> PGSHIFT, start_ptx, end_ptx, permission_desc,
+				from_addr, end_addr);
+		} else {
+			cprintf(" [%5.5x-%5.5x] PTE[%3.3x]     %s\n %5.5x", (uint32_t)(base_addr + start_ptx * PGSIZE) >> PGSHIFT,
+				(uint32_t)(base_addr + end_ptx * PGSIZE) >> PGSHIFT, start_ptx, permission_desc,
+				from_addr);
+		}
+		
+		k = end_ptx + 1;
+	}
 }
 
 /* why mon_backtrace need the three arguments? */
