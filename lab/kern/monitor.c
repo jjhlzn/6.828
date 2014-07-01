@@ -83,6 +83,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 	int i,j;
 	for (i=PDX(from_addr); i<=PDX(end_addr); ) {
 		int start_pdx = i, end_pdx;
+		physaddr_t start_phys_addr = 0;
 		uint16_t pde_permission;
 		
 		if (kern_pgdir[i] & PTE_P) {
@@ -100,18 +101,28 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 			if ( (kern_pgdir[j] & PTE_P) && ((kern_pgdir[j] & 0xfff) == pde_permission)) {
 				end_pdx = j;
 				
-				//check whether pte has the same permisson 
+				//check whether pte has the same permisson, and phys memory address should be continuous.
 				int k;
+				int is_goto_outer = 0;
 				for (k=0; k<NPTENTRIES; k++) {
-					pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
-					assert(ptep);
+					pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
+					if (!(ptep & PTE_P)) {
+						is_goto_outer = 1;
+						break;
+					}
 					if (j == i && k == 0) {
-						pte_permission = *ptep & 0xfff;
+						pte_permission = ptep & 0xfff;
+						start_phys_addr = PTE_ADDR(ptep);
 						continue;
 					}
-					if ( (*ptep & 0xfff) != pte_permission  ) 
+					if ( ((ptep & 0xfff) != pte_permission) 
+					     || ((start_phys_addr+(j-i)*PTSIZE+k*PGSIZE) != PTE_ADDR(ptep))  ) {
+						is_goto_outer = 1;
 						break;
+					}
 				}
+				if (is_goto_outer)
+					break;
 			} else {
 				break;
 			}
@@ -119,26 +130,25 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		
 		//pde show format:
 		//[from_virtual-end_virtual]  PDE[from_index-end_index]      --------(privilege bits)
-		
 		assert(start_pdx <= end_pdx);
 		char permission_desc[10];
 		get_pte_permission_desc(pde_permission, permission_desc);
 		if (start_pdx < end_pdx) {
-			cprintf("[%5.5x-%5.5x]  PDE[%3.3x-%3.3x] %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
-				    , (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, end_pdx, permission_desc);
+			cprintf("[%5.05x-%5.05x]  PDE[%3.03x-%3.03x] %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
+				    (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, end_pdx, permission_desc);
 				    
 			//in this case, the pte's permission should be the the same.
-			int k;
-			for (k=start_pdx; k<=end_pdx; k++)
-				show_pte_mappings(k);
+			get_pte_permission_desc(pte_permission, permission_desc);
+			cprintf("  [%5.05x-%5.05x]  PTE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
+				(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT, 0, 0x3ff, permission_desc,
+				(uint32_t)start_phys_addr >> PGSHIFT, 
+				(uint32_t)(start_phys_addr + (end_pdx-start_pdx+1) * PTSIZE - PGSIZE) >> PGSHIFT);
 		} else {
-			cprintf("[%5.5x-%5.5x]  PDE[%3.3x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
+			cprintf("[%5.05x-%5.05x]  PDE[%3.03x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
 				    , (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, permission_desc);
 			show_pte_mappings(start_pdx);
 		}
-		
-		
-		
+	
 		i = end_pdx + 1;
 	}
 	
@@ -170,18 +180,19 @@ show_pte_mappings(int pdx)
 	uintptr_t base_addr = pdx * PTSIZE;
 	uint16_t pte_permission;
 	int k;
-	for (k=0; k<NPTENTRIES; k++) {
+	for (k=0; k<NPTENTRIES;) {
 		int start_ptx = k, end_ptx;
 		physaddr_t from_addr, end_addr;
 		
-		pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + k * PGSIZE), 0);
-		assert(ptep);
+		pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(base_addr + k * PGSIZE), 0);
 		
-		if (!(*ptep & PTE_P))
+		if (!ptep) {
+			k++;
 			continue;
+		}
 			
-		from_addr = PTE_ADDR(*ptep);
-		pte_permission = *ptep & 0xfff;
+		from_addr = PTE_ADDR(ptep);
+		pte_permission = ptep & 0xfff;
 		
 		int n;
 		for (n=k+1; n<NPTENTRIES; n++) {
@@ -197,13 +208,13 @@ show_pte_mappings(int pdx)
 		char permission_desc[10];
 		get_pte_permission_desc(pte_permission, permission_desc);
 		if (start_ptx < end_ptx) {
-			cprintf(" [%5.5x-%5.5x] PTE[%3.3x-%3.3x] %s\n %5.5x-%5.5x", (uint32_t)(base_addr + start_ptx * PGSIZE) >> PGSHIFT,
+			cprintf("  [%5.05x-%5.05x]  PTE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", (uint32_t)(base_addr + start_ptx * PGSIZE) >> PGSHIFT,
 				(uint32_t)(base_addr + end_ptx * PGSIZE) >> PGSHIFT, start_ptx, end_ptx, permission_desc,
-				from_addr, end_addr);
+				from_addr >> PGSHIFT, end_addr >> PGSHIFT);
 		} else {
-			cprintf(" [%5.5x-%5.5x] PTE[%3.3x]     %s\n %5.5x", (uint32_t)(base_addr + start_ptx * PGSIZE) >> PGSHIFT,
+			cprintf("  [%5.05x-%5.05x]  PTE[%3.03x]     %s %5.05x\n", (uint32_t)(base_addr + start_ptx * PGSIZE) >> PGSHIFT,
 				(uint32_t)(base_addr + end_ptx * PGSIZE) >> PGSHIFT, start_ptx, permission_desc,
-				from_addr);
+				from_addr >> PGSHIFT);
 		}
 		
 		k = end_ptx + 1;
