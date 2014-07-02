@@ -15,7 +15,9 @@
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
 static void get_pte_permission_desc(uint16_t pte_permission, char *msg);
-static void show_pte_mappings(int pdx);
+static void show_pte_mappings(int pdx, intptr_t from_addr, intptr_t end_addr);
+static int parse_str2int(char *str);
+static int atoi(char *str, int base);
 
 struct Command {
 	const char *name;
@@ -69,16 +71,14 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		return -1;
 	}
 	
-	uint32_t from_addr, end_addr;
-	if (argc == 0) {
-		from_addr = 0;
-		end_addr = 0xffffffff;
-	} else if (argc == 2) {
-		//TODO: parse parameters
-		panic("not implemented!\n");
-		return -1;
-	}
+	uint32_t from_addr = 0, end_addr = 0xffffffff;
 	
+	if (argc == 3) {
+		from_addr = (uint32_t) parse_str2int(argv[1]);
+		end_addr = (uint32_t) parse_str2int(argv[2]);
+	} 
+	//cprintf("from_addr = %x\n",from_addr);
+	//cprintf("end_addr = %x\n",end_addr);
 	extern pde_t *kern_pgdir;
 	int i,j;
 	for (i=PDX(from_addr); i<=PDX(end_addr); ) {
@@ -146,7 +146,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		} else {
 			cprintf("[%5.05x-%5.05x]  PDE[%3.03x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
 				    , (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, permission_desc);
-			show_pte_mappings(start_pdx);
+			show_pte_mappings(start_pdx, from_addr, end_addr);
 		}
 	
 		i = end_pdx + 1;
@@ -173,14 +173,28 @@ get_pte_permission_desc(uint16_t pte_permission, char *msg)
 			 );
 }
 
+
+//print page table mapping for virtual address region [from_virtual, end_virtual] in page dirctory entry 'pdx'.
+//NOTE: pdx memory region should have intersector with [from_virtual, end_virtual]
 static void
-show_pte_mappings(int pdx) 
+show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual) 
 {
 	extern pde_t *kern_pgdir;
 	uintptr_t base_addr = pdx * PTSIZE;
 	uint16_t pte_permission;
-	int k;
-	for (k=0; k<NPTENTRIES;) {
+	int k, max_k;
+	
+	if (base_addr >= from_virtual)
+		k = 0;
+	else 
+		k = PTX(from_virtual);
+	if (end_virtual >= (int32_t)(base_addr + PTSIZE))
+		max_k = NPTENTRIES-1;
+	else 
+		max_k = PTX(end_virtual);
+	
+	//cprintf("k=%d, max_k=%d\n", k, max_k);
+	for (; k < NPTENTRIES && k <= max_k ;) {
 		int start_ptx = k, end_ptx;
 		physaddr_t from_addr, end_addr;
 		
@@ -195,7 +209,7 @@ show_pte_mappings(int pdx)
 		pte_permission = ptep & 0xfff;
 		
 		int n;
-		for (n=k+1; n<NPTENTRIES; n++) {
+		for (n=k+1; n<NPTENTRIES && n <= max_k; n++) {
 			pte_t ptep2 = *pgdir_walk(kern_pgdir, (void *)(base_addr + n * PGSIZE), 0);
 			if ( (ptep2 & 0xfff) != pte_permission )
 				break;
@@ -220,6 +234,52 @@ show_pte_mappings(int pdx)
 		k = end_ptx + 1;
 	}
 }
+
+static int 
+parse_str2int(char *str)
+{
+	//TODO: should check str format
+	int value;
+	if (strlen(str) > 2 && str[0] == '0' && str[1] == 'x') 
+		value = atoi(str,16); 
+	else 
+		value = atoi(str,10);
+	return (uint32_t)value;
+}
+
+
+//conert to a numberic string to decimal, numberic can be hex string '0x12ff' 
+//or decmal '1234', you can use base to speicify.
+static int 
+atoi(char *str, int base) 
+{
+	if (base == 16)
+		str += 2; //skip 0x
+	int value = 0;
+	int i, count = strlen(str);
+	for (i=0; i<strlen(str); i++) {
+		char ch = str[i];
+		int ch_num = 0;
+		if (ch >= '0' && ch <= '9')
+			ch_num = ch - '0';
+		else
+			ch_num = ch - 'a' + 10;
+		
+		int index = count - 1 - i;	
+		if (base == 16)
+			value += (ch_num << (4 * index));
+		else if (base == 10) {
+			while (index > 0) {
+				ch_num *= 10;
+				index--;
+			}
+			value += ch_num;
+		};
+	}
+	return value;
+}
+
+
 
 /* why mon_backtrace need the three arguments? */
 int
