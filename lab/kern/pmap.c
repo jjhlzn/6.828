@@ -223,14 +223,23 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+	//uintptr_t kern_addr = KERNBASE;
+	//phys_addr = 0;
+	//for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PGSIZE, phys_addr += PGSIZE) {
+		//cprintf("kern_addr = %8.8x\n",kern_addr);
+	//	pte_t *ptep = pgdir_walk(kern_pgdir, (void *)kern_addr, 1);
+	//	if (!ptep)
+	//		panic("out of memory!");
+	//	*ptep = phys_addr | PTE_W | PTE_P;
+	//}
+	
+	//set PS bit of PDE to 1, yes, use 4MB page table.
 	uintptr_t kern_addr = KERNBASE;
 	phys_addr = 0;
-	for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PGSIZE, phys_addr += PGSIZE) {
+	for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PTSIZE, phys_addr += PTSIZE) {
 		//cprintf("kern_addr = %8.8x\n",kern_addr);
-		pte_t *ptep = pgdir_walk(kern_pgdir, (void *)kern_addr, 1);
-		if (!ptep)
-			panic("out of memory!");
-		*ptep = phys_addr | PTE_W | PTE_P;
+		pde_t *pdep = kern_pgdir + (kern_addr >> PTSHIFT);
+		*pdep = phys_addr | PTE_PS | PTE_W | PTE_P;
 	}
 
 	// Check that the initial page directory has been set up correctly.
@@ -243,6 +252,9 @@ mem_init(void)
 	//
 	// If the machine reboots at this point, you've probably set up your
 	// kern_pgdir wrong.
+	uint32_t cr4 = rcr4();
+	cr4 |= (1<<4); //Open PSE
+	lcr4(cr4);
 	lcr3(PADDR(kern_pgdir));
 
 	check_page_free_list(0);
@@ -822,10 +834,17 @@ check_va2pa(pde_t *pgdir, uintptr_t va)
 	pgdir = &pgdir[PDX(va)];
 	if (!(*pgdir & PTE_P))
 		return ~0;
-	p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
-	if (!(p[PTX(va)] & PTE_P))
-		return ~0;
-	return PTE_ADDR(p[PTX(va)]);
+	if (*pgdir & PTE_PS) {
+		
+		physaddr_t phys_addr = (*pgdir & 0xffc00000) + (va & 0x003fffff);
+		//cprintf("phys_addr = %8.8x\n",phys_addr);
+		return phys_addr;
+	} else {
+		p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
+		if (!(p[PTX(va)] & PTE_P))
+			return ~0;
+		return PTE_ADDR(p[PTX(va)]);
+	}
 }
 
 

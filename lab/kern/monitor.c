@@ -62,6 +62,31 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
+{
+	//check parameters
+	if (argc != 2 && argc != 3) {
+		cprintf("usage: setptpermission virtual_addr or setptpermission start_virtual end_virtual\n");
+		return -1;
+	}
+	
+	int32_t start_virtual = 0, end_virtual = 0;
+	if (argc == 2) {
+		start_virtual = (int32_t) parse_str2int(argv[1]);
+		end_virtual = start_virtual;
+	} else if (argc == 3) {
+		start_virtual = (int32_t) parse_str2int(argv[1]);
+		end_virtual = (int32_t) parse_str2int(argv[2]);
+	}
+	
+	int i;
+	for (i=PDX(start_virtual); i<=PDX(end_virtual); i++) {
+		
+	}
+	
+	return 0;
+}
+
 int 
 mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 {
@@ -71,12 +96,13 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		return -1;
 	}
 	
-	uint32_t from_addr = 0, end_addr = 0xffffffff;
+	intptr_t from_addr = 0, end_addr = 0xffffffff;
 	
 	if (argc == 3) {
-		from_addr = (uint32_t) parse_str2int(argv[1]);
-		end_addr = (uint32_t) parse_str2int(argv[2]);
+		from_addr = (intptr_t) parse_str2int(argv[1]);
+		end_addr = (intptr_t) parse_str2int(argv[2]);
 	} 
+	
 	//cprintf("from_addr = %x\n",from_addr);
 	//cprintf("end_addr = %x\n",end_addr);
 	extern pde_t *kern_pgdir;
@@ -101,28 +127,37 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 			if ( (kern_pgdir[j] & PTE_P) && ((kern_pgdir[j] & 0xfff) == pde_permission)) {
 				end_pdx = j;
 				
-				//check whether pte has the same permisson, and phys memory address should be continuous.
-				int k;
-				int is_goto_outer = 0;
-				for (k=0; k<NPTENTRIES; k++) {
-					pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
-					if (!(ptep & PTE_P)) {
-						is_goto_outer = 1;
-						break;
-					}
-					if (j == i && k == 0) {
-						pte_permission = ptep & 0xfff;
-						start_phys_addr = PTE_ADDR(ptep);
+				if (kern_pgdir[j] & PTE_PS) { //pde used as 4M page
+					if (j==i) {
+						start_phys_addr = kern_pgdir[j] & 0xffc00000;
 						continue;
 					}
-					if ( ((ptep & 0xfff) != pte_permission) 
-					     || ((start_phys_addr+(j-i)*PTSIZE+k*PGSIZE) != PTE_ADDR(ptep))  ) {
-						is_goto_outer = 1;
+					if (start_phys_addr + (j-i) * PTSIZE != (kern_pgdir[j] & 0xffc00000)) 
 						break;
+				} else {
+					//check whether pte has the same permisson, and phys memory address should be continuous.
+					int k;
+					int is_goto_outer = 0;
+					for (k=0; k<NPTENTRIES; k++) {
+						pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
+						if (!(ptep & PTE_P)) {
+							is_goto_outer = 1;
+							break;
+						}
+						if (j == i && k == 0) {
+							pte_permission = ptep & 0xfff;
+							start_phys_addr = PTE_ADDR(ptep);
+							continue;
+						}
+						if ( ((ptep & 0xfff) != pte_permission) 
+							 || ((start_phys_addr+(j-i)*PTSIZE+k*PGSIZE) != PTE_ADDR(ptep))  ) {
+							is_goto_outer = 1;
+							break;
+						}
 					}
+					if (is_goto_outer)
+						break;
 				}
-				if (is_goto_outer)
-					break;
 			} else {
 				break;
 			}
@@ -134,19 +169,38 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		char permission_desc[10];
 		get_pte_permission_desc(pde_permission, permission_desc);
 		if (start_pdx < end_pdx) {
-			cprintf("[%5.05x-%5.05x]  PDE[%3.03x-%3.03x] %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
-				    (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, end_pdx, permission_desc);
-				    
-			//in this case, the pte's permission should be the the same.
-			get_pte_permission_desc(pte_permission, permission_desc);
-			cprintf("  [%5.05x-%5.05x]  PTE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
-				(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT, 0, 0x3ff, permission_desc,
-				(uint32_t)start_phys_addr >> PGSHIFT, 
-				(uint32_t)(start_phys_addr + (end_pdx-start_pdx+1) * PTSIZE - PGSIZE) >> PGSHIFT);
+			if (kern_pgdir[start_pdx] & PTE_PS) {
+				//cprintf("!!!!!!!!!!!!!!!!!\n");
+				cprintf("[%5.05x-%5.05x]  PDE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", 
+						(uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
+						(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , 
+						 start_pdx, end_pdx, permission_desc,
+						(uint32_t)start_phys_addr >> PGSHIFT, 
+						(uint32_t)(start_phys_addr + (end_pdx-start_pdx+1) * PTSIZE - PGSIZE) >> PGSHIFT);
+			} else {
+			
+				cprintf("[%5.05x-%5.05x]  PDE[%3.03x-%3.03x] %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
+						(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, end_pdx, permission_desc);
+						
+				//in this case, the pte's permission should be the the same.
+				get_pte_permission_desc(pte_permission, permission_desc);
+				cprintf("  [%5.05x-%5.05x]  PTE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
+					(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT, 0, 0x3ff, permission_desc,
+					(uint32_t)start_phys_addr >> PGSHIFT, 
+					(uint32_t)(start_phys_addr + (end_pdx-start_pdx+1) * PTSIZE - PGSIZE) >> PGSHIFT);
+			}
 		} else {
-			cprintf("[%5.05x-%5.05x]  PDE[%3.03x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
-				    , (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, permission_desc);
-			show_pte_mappings(start_pdx, from_addr, end_addr);
+			if (kern_pgdir[start_pdx] & PTE_PS) {
+				cprintf("[%5.05x-%5.05x]  PDE[%3.03x] %s %5.05x\n", 
+						(uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
+						(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , 
+						 start_pdx, permission_desc,
+						(uint32_t)start_phys_addr >> PGSHIFT);
+			} else {
+				cprintf("[%5.05x-%5.05x]  PDE[%3.03x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
+						, (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, permission_desc);
+				show_pte_mappings(start_pdx, from_addr, end_addr);
+			}
 		}
 	
 		i = end_pdx + 1;
@@ -182,6 +236,7 @@ show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual)
 	extern pde_t *kern_pgdir;
 	uintptr_t base_addr = pdx * PTSIZE;
 	uint16_t pte_permission;
+	
 	int k, max_k;
 	
 	if (base_addr >= from_virtual)
