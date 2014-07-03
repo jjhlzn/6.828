@@ -29,7 +29,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
-	{ "showmappings", "Display virtual memory mapping", mon_showmappings }
+	{ "showmappings", "Display virtual memory mapping", mon_showmappings },
+	{ "setptpermission", "Set page table permission", mon_setptpermission }
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -64,26 +65,49 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 
 int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 {
+	extern pde_t *kern_pgdir;
 	//check parameters
-	if (argc != 2 && argc != 3) {
-		cprintf("usage: setptpermission virtual_addr or setptpermission start_virtual end_virtual\n");
-		return -1;
+	if (argc != 3 && argc != 4) {
+		cprintf("usage: setptpermission virtual_addr permission or setptpermission start_virtual end_virtual permission\n");
+		return 0;
 	}
 	
-	int32_t start_virtual = 0, end_virtual = 0;
-	if (argc == 2) {
+	intptr_t start_virtual = 0, end_virtual = 0;
+	uint16_t permission = 0;
+	if (argc == 3) {
 		start_virtual = (int32_t) parse_str2int(argv[1]);
 		end_virtual = start_virtual;
-	} else if (argc == 3) {
+		permission = (uint16_t)parse_str2int(argv[2]);
+	} else if (argc == 4) {
 		start_virtual = (int32_t) parse_str2int(argv[1]);
 		end_virtual = (int32_t) parse_str2int(argv[2]);
+		permission = (uint16_t)parse_str2int(argv[3]);
 	}
 	
-	int i;
+	int i,j,end_ptx;
 	for (i=PDX(start_virtual); i<=PDX(end_virtual); i++) {
-		
+		if (kern_pgdir[i] & PTE_PS) {
+			kern_pgdir[i] = (kern_pgdir[i] & 0xfffffe00) | (permission & 0x1ff);
+		} else {
+			if (i==PDX(start_virtual)) 
+				j = PTX(start_virtual);
+			else
+				j = 0;
+			if (i==PDX(end_virtual))
+				end_ptx = PTX(end_virtual);
+			else
+				end_ptx = NPTENTRIES - 1;
+			intptr_t base_addr = i * PTSIZE;
+			for (; j <= end_ptx; j++) {
+				pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
+				if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
+					cprintf("no page table or has not mapped");
+					continue;
+				}
+				*ptep = (*ptep & 0xfffffe00) | (permission & 0x1ff);
+			}
+		}
 	}
-	
 	return 0;
 }
 
@@ -93,7 +117,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 	//check parameters
 	if (argc != 3 && argc != 1) {
 		cprintf("usage: showmappings or showmappings start_addr end_addr\n");
-		return -1;
+		return 0;
 	}
 	
 	intptr_t from_addr = 0, end_addr = 0xffffffff;
@@ -209,6 +233,167 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int 
+mon_dump(int argc, char **argv, struct Trapframe *tf)
+{
+	//parse arguments
+	if (arc != 3 || argc != 4) {
+		cprintf("usage: dump [-p|-v] start_addr end_addr\n");
+		return 0;
+	}
+	
+	int use_virtual = 1;
+	intptr_t start_addr = 0, end_addr = 0;
+	
+	if (argc == 4) {
+		if (argv[1][0] == '-' && argv[1][1] == 'p' && argv[1][2] == 0) {
+			use_virtual = 0;
+		} else if (argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0) {
+			use_virtual = 1;
+		} else {
+			cprintf("usage: dump [-p|-v] start_addr end_addr\n");
+			return 0;
+		}
+		start_addr = (intptr_t)parse_str2int(argv[2]);
+		end_addr = (intptr_t)parse_str2int(argv[3]);
+	} else {
+		start_addr = (intptr_t)parse_str2int(argv[1]);
+		end_addr = (intptr_t)parse_str2int(argv[2]);
+	}
+	
+	
+	
+	return 0;
+} 
+
+static void 
+dump_virtual_mem (intptr_t start_addr, intptr_t end_addr)
+{
+	int dw_count_per_line = 6; //show how many double worlds per line
+	int i,j,end_ptx;
+	for (i=PDX(start_addr); i<=PDX(end_addr); i++) {
+		pde_t pde = kern_pgdir[i];
+		
+		if (pde == 0) { //haven't mapped
+			
+		}
+		
+		if (pde & PTE_PS) {
+			if (pde & PTE_P) {
+				intptr_t base_addr = i * PTSIZE;
+				uint32_t start_offset = start_addr & 0x003fffff, end_offset;
+				
+				if (i == PDX(end_addr))
+					end_offset = end_addr & 0x003fffff;
+				else 
+					end_offset = 0x3fffff;
+				int k = start_offset;
+				if (k % dw_count_per_line > 0){
+					int n;
+					for (n=0; n < (dw_count_per_line-(k % dw_count_per_line); n++)
+						cprintf("          "); //ten spaces
+				}
+				for (; k <= end_offset; k++) {
+					cprintf("%8.08x", *(uint32_t *)(base_addr + k));
+					if ((k + 1) % dw_count_per_line == 0) 
+						cprintf("\n");
+					else
+						cprintf("  ");
+				}
+			} else {
+				
+			}
+		} else {
+			if (i==PDX(start_addr)) 
+				j = PTX(start_addr);
+			else
+				j = 0;
+			if (i==PDX(end_addr))
+				end_ptx = PTX(end_addr);
+			else
+				end_ptx = NPTENTRIES - 1;
+			intptr_t base_addr = i * PTSIZE;
+			for (; j <= end_ptx; j++) {
+				pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
+				if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
+					cprintf("no page table or has not mapped");
+					continue;
+				}
+				*ptep = (*ptep & 0xfffffe00) | (permission & 0x1ff);
+			}
+		}
+	}
+}
+
+//4M page offset
+#define BIGPGOFF(la)	(((uintptr_t) (la)) & 0x3fffff)
+//dump memory contents for virtual address region [from_virtual, end_virtual].
+//NOTE: [from_virtual, end_virtual] should be the same pde
+static void 
+dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
+{
+	int pdx = PDX(start_addr);
+	assert(start_addr <= end_addr);
+	assert(end_addr < start_addr + PTSIZE);
+	
+	extern pde_t *kern_pgdir;
+	pde_t *pdep = kern_pgdir + pdx;
+	
+	intptr_t base_addr = i * PTSIZE;
+	uint32_t start_offset = BIGPGOFF(start_addr), end_offset = BIGPGOFF(end_addr);
+	if (pde == 0) { //haven't mapped
+		//print "--------" for don't mapped contents.
+		cprintf("[%8.08-%8.08x] haven't mapped\n", start_addr, end_addr);
+		return;	
+	}
+		
+	if (pde & PTE_PS) {
+		if (pde & PTE_P) {
+			int i = start_offset;
+			if (i % dw_count_per_line > 0){
+				int j;
+				for (j=0; j < (dw_count_per_line-(i % dw_count_per_line); j++)
+					cprintf("          "); //ten spaces
+			}
+			for (; i <= end_offset; i++) {
+				cprintf("%8.08x", *(uint32_t *)(base_addr + i));
+				if ((i + 1) % dw_count_per_line == 0) 
+					cprintf("\n");
+				else
+					cprintf("  ");
+			}
+		} else {
+			cprintf("[%8.08-%8.08x] page present bit is 0\n", start_addr, end_addr);
+		}
+	} else {
+		if (i==PDX(start_addr)) 
+			j = PTX(start_addr);
+		else
+			j = 0;
+		if (i==PDX(end_addr))
+			end_ptx = PTX(end_addr);
+		else
+			end_ptx = NPTENTRIES - 1;
+		intptr_t base_addr = i * PTSIZE;
+		for (; j <= end_ptx; j++) {
+			pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
+			if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
+				cprintf("no page table or has not mapped");
+				continue;
+			}
+			*ptep = (*ptep & 0xfffffe00) | (permission & 0x1ff);
+		}
+	}
+}
+
+//dump memory contents for virtual address region [from_virtual, end_virtual].
+//NOTE: [from_virtual, end_virtual] should be the same pte
+static void 
+dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
+{
+	
+}
+
 static void
 get_pte_permission_desc(uint16_t pte_permission, char *msg)
 {
@@ -229,7 +414,8 @@ get_pte_permission_desc(uint16_t pte_permission, char *msg)
 
 
 //print page table mapping for virtual address region [from_virtual, end_virtual] in page dirctory entry 'pdx'.
-//NOTE: pdx memory region should have intersector with [from_virtual, end_virtual]
+//NOTE: 1. it's not 4M Page
+//      2. pdx memory region should have intersector with [from_virtual, end_virtual]
 static void
 show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual) 
 {
