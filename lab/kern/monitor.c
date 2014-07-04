@@ -18,6 +18,15 @@ static void get_pte_permission_desc(uint16_t pte_permission, char *msg);
 static void show_pte_mappings(int pdx, intptr_t from_addr, intptr_t end_addr);
 static int parse_str2int(char *str);
 static int atoi(char *str, int base);
+static void dump_virtual_mem (intptr_t start_addr, intptr_t end_addr);
+static void dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr);
+static void dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr);
+static void dump_prefix_empty (intptr_t start_addr);
+static void dump_db (intptr_t addr, uint32_t dw);
+
+#define DW_COUNT_PER_LINE  4 //show how many double worlds per line
+//4M page offset
+#define BIGPGOFF(la)	(((uintptr_t) (la)) & 0x3fffff)
 
 struct Command {
 	const char *name;
@@ -30,7 +39,8 @@ static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "showmappings", "Display virtual memory mapping", mon_showmappings },
-	{ "setptpermission", "Set page table permission", mon_setptpermission }
+	{ "setptpermission", "Set page table permission", mon_setptpermission },
+	{ "dump", "Dump memory contents", mon_dump}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -237,7 +247,7 @@ int
 mon_dump(int argc, char **argv, struct Trapframe *tf)
 {
 	//parse arguments
-	if (arc != 3 || argc != 4) {
+	if (argc != 3 && argc != 4) {
 		cprintf("usage: dump [-p|-v] start_addr end_addr\n");
 		return 0;
 	}
@@ -260,138 +270,120 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 		start_addr = (intptr_t)parse_str2int(argv[1]);
 		end_addr = (intptr_t)parse_str2int(argv[2]);
 	}
+	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	end_addr -= 1;
 	
+	if ((uint32_t)(start_addr % 4) != 0)
+		start_addr -= (uint32_t)(start_addr % 4);
+	uint32_t mod = end_addr % (uint32_t)4;
+	if ( mod != 3)
+		end_addr += (3 - (uint32_t)(end_addr % 4));
 	
-	
+	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	dump_virtual_mem(start_addr, end_addr);
 	return 0;
 } 
 
 static void 
 dump_virtual_mem (intptr_t start_addr, intptr_t end_addr)
 {
-	int dw_count_per_line = 6; //show how many double worlds per line
-	int i,j,end_ptx;
-	for (i=PDX(start_addr); i<=PDX(end_addr); i++) {
-		pde_t pde = kern_pgdir[i];
-		
-		if (pde == 0) { //haven't mapped
-			
-		}
-		
-		if (pde & PTE_PS) {
-			if (pde & PTE_P) {
-				intptr_t base_addr = i * PTSIZE;
-				uint32_t start_offset = start_addr & 0x003fffff, end_offset;
-				
-				if (i == PDX(end_addr))
-					end_offset = end_addr & 0x003fffff;
-				else 
-					end_offset = 0x3fffff;
-				int k = start_offset;
-				if (k % dw_count_per_line > 0){
-					int n;
-					for (n=0; n < (dw_count_per_line-(k % dw_count_per_line); n++)
-						cprintf("          "); //ten spaces
-				}
-				for (; k <= end_offset; k++) {
-					cprintf("%8.08x", *(uint32_t *)(base_addr + k));
-					if ((k + 1) % dw_count_per_line == 0) 
-						cprintf("\n");
-					else
-						cprintf("  ");
-				}
-			} else {
-				
-			}
-		} else {
-			if (i==PDX(start_addr)) 
-				j = PTX(start_addr);
-			else
-				j = 0;
-			if (i==PDX(end_addr))
-				end_ptx = PTX(end_addr);
-			else
-				end_ptx = NPTENTRIES - 1;
-			intptr_t base_addr = i * PTSIZE;
-			for (; j <= end_ptx; j++) {
-				pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
-				if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
-					cprintf("no page table or has not mapped");
-					continue;
-				}
-				*ptep = (*ptep & 0xfffffe00) | (permission & 0x1ff);
-			}
-		}
+	intptr_t addr;
+	for (addr = start_addr; addr <= end_addr; addr = (PDX(addr)+1) * PTSIZE) {
+		int pdx = PDX(addr);
+		intptr_t base_addr = pdx * PTSIZE;
+		intptr_t pde_end_addr = (uint32_t)((pdx + 1) * PTSIZE - 1);
+		dump_virtual_mem_per_pde(addr, pde_end_addr < end_addr ? pde_end_addr : end_addr);
 	}
+	cprintf("\n");
 }
 
-//4M page offset
-#define BIGPGOFF(la)	(((uintptr_t) (la)) & 0x3fffff)
+
 //dump memory contents for virtual address region [from_virtual, end_virtual].
 //NOTE: [from_virtual, end_virtual] should be the same pde
 static void 
 dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 {
+	cprintf("dump_virtual_mem_per_pde: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	int pdx = PDX(start_addr);
-	assert(start_addr <= end_addr);
+	assert(start_addr < end_addr);
 	assert(end_addr < start_addr + PTSIZE);
 	
 	extern pde_t *kern_pgdir;
-	pde_t *pdep = kern_pgdir + pdx;
+	pde_t pde = kern_pgdir[pdx];
 	
-	intptr_t base_addr = i * PTSIZE;
-	uint32_t start_offset = BIGPGOFF(start_addr), end_offset = BIGPGOFF(end_addr);
 	if (pde == 0) { //haven't mapped
-		//print "--------" for don't mapped contents.
-		cprintf("[%8.08-%8.08x] haven't mapped\n", start_addr, end_addr);
+		cprintf("%8.08x-%8.08x: not mapped\n", start_addr, end_addr);
 		return;	
 	}
-		
+
+	intptr_t base_addr = pdx * PTSIZE;
 	if (pde & PTE_PS) {
 		if (pde & PTE_P) {
-			int i = start_offset;
-			if (i % dw_count_per_line > 0){
-				int j;
-				for (j=0; j < (dw_count_per_line-(i % dw_count_per_line); j++)
-					cprintf("          "); //ten spaces
-			}
-			for (; i <= end_offset; i++) {
-				cprintf("%8.08x", *(uint32_t *)(base_addr + i));
-				if ((i + 1) % dw_count_per_line == 0) 
-					cprintf("\n");
-				else
-					cprintf("  ");
+			uint32_t start_offset = BIGPGOFF(start_addr), end_offset = BIGPGOFF(end_addr);
+			dump_prefix_empty(start_addr);
+			uint32_t i = start_offset;
+			for (; i < end_offset; i += 4) {
+				dump_db (base_addr+i, *(uint32_t *)(base_addr + i));
 			}
 		} else {
 			cprintf("[%8.08-%8.08x] page present bit is 0\n", start_addr, end_addr);
 		}
 	} else {
-		if (i==PDX(start_addr)) 
-			j = PTX(start_addr);
-		else
-			j = 0;
-		if (i==PDX(end_addr))
-			end_ptx = PTX(end_addr);
-		else
-			end_ptx = NPTENTRIES - 1;
-		intptr_t base_addr = i * PTSIZE;
-		for (; j <= end_ptx; j++) {
-			pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
-			if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
-				cprintf("no page table or has not mapped");
-				continue;
-			}
-			*ptep = (*ptep & 0xfffffe00) | (permission & 0x1ff);
+		intptr_t addr = start_addr;
+		for (; addr <= end_addr; addr = (PTX(addr) + 1) * PGSIZE) {
+			int ptx = PTX(start_addr);
+			intptr_t pte_end_addr = (uint32_t)(base_addr + ptx * PGSIZE - 1);
+			dump_virtual_mem_per_pte(addr,  pte_end_addr < end_addr ? pte_end_addr : end_addr);
 		}
 	}
 }
 
-//dump memory contents for virtual address region [from_virtual, end_virtual].
-//NOTE: [from_virtual, end_virtual] should be the same pte
+//dump memory contents for virtual address region [start_addr, end_addr]. 
+//the arguments are virtual addresses.
+//NOTE: [from_virtual, end_virtual] should be in the same pte
+		
 static void 
 dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
 {
+	cprintf("dump_virtual_mem_per_pte: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	assert(start_addr % (uint32_t)4 == 0);
+	assert((uint32_t)(end_addr % (uint32_t)4) == 3);
+	int ptx = PTX(start_addr);
+	assert(start_addr + PGSIZE - 1 >= end_addr);
+
+	intptr_t addr = start_addr;
+	for (; addr <= end_addr; addr += 4) {
+		dump_db(addr, *(uint32_t *)addr);
+	}
 	
+}
+
+static void 
+dump_prefix_empty (intptr_t start_addr)
+{
+	uint32_t pos = start_addr / (uint32_t)4;
+	assert(start_addr % (uint32_t)4 == 0);
+	cprintf("%8.08x-%8.08x: ", start_addr, (uint32_t)(start_addr + DW_COUNT_PER_LINE * 4));
+	if (pos % DW_COUNT_PER_LINE > 0){
+		int j;
+		for (j=0; j < DW_COUNT_PER_LINE-(pos % DW_COUNT_PER_LINE); j++)
+			cprintf("          "); //ten spaces
+	}
+}
+
+static void 
+dump_db (intptr_t addr, uint32_t dw) 
+{
+	//cprintf("addr = %8.08x\n",addr);
+	assert(addr % (uint32_t)4 == 0);
+	cprintf("%8.08x",  dw);
+	uint32_t pos = addr / (uint32_t)4;
+	if ((pos + 1) % DW_COUNT_PER_LINE == 0) {
+		cprintf("\n");
+		cprintf("%8.08x-%8.08x: ", addr + 4, addr + (DW_COUNT_PER_LINE + 1) * 4);
+	}
+	else
+		cprintf("  ");
 }
 
 static void
