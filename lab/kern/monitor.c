@@ -23,6 +23,7 @@ static void dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr);
 static void dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr);
 static void dump_prefix_empty (intptr_t start_addr);
 static void dump_db (intptr_t addr, uint32_t dw);
+static void dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr);
 
 #define DW_COUNT_PER_LINE  4 //show how many double worlds per line
 //4M page offset
@@ -204,7 +205,6 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		get_pte_permission_desc(pde_permission, permission_desc);
 		if (start_pdx < end_pdx) {
 			if (kern_pgdir[start_pdx] & PTE_PS) {
-				//cprintf("!!!!!!!!!!!!!!!!!\n");
 				cprintf("[%5.05x-%5.05x]  PDE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", 
 						(uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
 						(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , 
@@ -273,14 +273,26 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	end_addr -= 1;
 	
-	if ((uint32_t)(start_addr % 4) != 0)
-		start_addr -= (uint32_t)(start_addr % 4);
-	uint32_t mod = end_addr % (uint32_t)4;
+	uint32_t mod = start_addr % (uint32_t)4;
+	if (mod != 0)
+		start_addr -= mod;
+    mod = end_addr % (uint32_t)4;
 	if ( mod != 3)
-		end_addr += (3 - (uint32_t)(end_addr % 4));
+		end_addr += (3 - mod);
 	
 	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
-	dump_virtual_mem(start_addr, end_addr);
+	if (use_virtual)
+		dump_virtual_mem(start_addr, end_addr);
+	else {
+		//check whether physaddr is valid
+		extern size_t npages;
+		uint32_t phys_mem_total = (uint32_t)(npages * PGSIZE);
+		if (!(start_addr < phys_mem_total - 1 && end_addr < phys_mem_total - 1)) {
+			cprintf("address extends max physical memory[%dK]", phys_mem_total / 1024);
+			return 0;
+		}
+		dump_phys_mem(start_addr, end_addr);
+	}
 	return 0;
 } 
 
@@ -295,6 +307,12 @@ dump_virtual_mem (intptr_t start_addr, intptr_t end_addr)
 		dump_virtual_mem_per_pde(addr, pde_end_addr < end_addr ? pde_end_addr : end_addr);
 	}
 	cprintf("\n");
+}
+
+static void 
+dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr)
+{
+	dump_virtual_mem(KERNBASE + start_addr, KERNBASE + end_addr);
 }
 
 
@@ -322,7 +340,7 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 			uint32_t start_offset = BIGPGOFF(start_addr), end_offset = BIGPGOFF(end_addr);
 			dump_prefix_empty(start_addr);
 			uint32_t i = start_offset;
-			for (; i < end_offset; i += 4) {
+			for (; i <= end_offset; i += 4) {
 				dump_db (base_addr+i, *(uint32_t *)(base_addr + i));
 			}
 		} else {
@@ -330,9 +348,9 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 		}
 	} else {
 		intptr_t addr = start_addr;
-		for (; addr <= end_addr; addr = (PTX(addr) + 1) * PGSIZE) {
-			int ptx = PTX(start_addr);
-			intptr_t pte_end_addr = (uint32_t)(base_addr + ptx * PGSIZE - 1);
+		for (; addr <= end_addr; addr = base_addr+ (PTX(addr) + 1) * PGSIZE) {
+			int ptx = PTX(addr);
+			intptr_t pte_end_addr = (uint32_t)(base_addr + (ptx + 1) * PGSIZE - 1);
 			dump_virtual_mem_per_pte(addr,  pte_end_addr < end_addr ? pte_end_addr : end_addr);
 		}
 	}
@@ -349,10 +367,10 @@ dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
 	assert(start_addr % (uint32_t)4 == 0);
 	assert((uint32_t)(end_addr % (uint32_t)4) == 3);
 	int ptx = PTX(start_addr);
-	assert(start_addr + PGSIZE - 1 >= end_addr);
+	assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
 
-	intptr_t addr = start_addr;
-	for (; addr <= end_addr; addr += 4) {
+	intptr_t addr;
+	for (addr = start_addr; addr <= end_addr; addr += 4) {
 		dump_db(addr, *(uint32_t *)addr);
 	}
 	
@@ -361,12 +379,16 @@ dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
 static void 
 dump_prefix_empty (intptr_t start_addr)
 {
+	assert(start_addr % (uint32_t)4 == 0);
 	uint32_t pos = start_addr / (uint32_t)4;
 	assert(start_addr % (uint32_t)4 == 0);
-	cprintf("%8.08x-%8.08x: ", start_addr, (uint32_t)(start_addr + DW_COUNT_PER_LINE * 4));
-	if (pos % DW_COUNT_PER_LINE > 0){
+	
+	if (pos % (uint32_t)DW_COUNT_PER_LINE > 0){
+		cprintf("%8.08x-%8.08x: ", start_addr, (uint32_t)(start_addr + DW_COUNT_PER_LINE * 4));
 		int j;
-		for (j=0; j < DW_COUNT_PER_LINE-(pos % DW_COUNT_PER_LINE); j++)
+		uint32_t skiped_count = (pos % (uint32_t)DW_COUNT_PER_LINE);
+		
+		for (j=0; j < skiped_count; j++)
 			cprintf("          "); //ten spaces
 	}
 }
@@ -374,16 +396,18 @@ dump_prefix_empty (intptr_t start_addr)
 static void 
 dump_db (intptr_t addr, uint32_t dw) 
 {
-	//cprintf("addr = %8.08x\n",addr);
 	assert(addr % (uint32_t)4 == 0);
-	cprintf("%8.08x",  dw);
 	uint32_t pos = addr / (uint32_t)4;
-	if ((pos + 1) % DW_COUNT_PER_LINE == 0) {
-		cprintf("\n");
-		cprintf("%8.08x-%8.08x: ", addr + 4, addr + (DW_COUNT_PER_LINE + 1) * 4);
+	if (pos % (uint32_t)DW_COUNT_PER_LINE == 0) {
+		cprintf("%8.08x-%8.08x: ", addr, addr + DW_COUNT_PER_LINE * 4);
+		cprintf("%8.08x  ",  dw);
+	} else {
+		cprintf("%8.08x  ",  dw);
 	}
-	else
-		cprintf("  ");
+	
+	if ((pos + 1) % (uint32_t)DW_COUNT_PER_LINE == 0) {
+		cprintf("\n");
+	}
 }
 
 static void
