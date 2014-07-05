@@ -56,44 +56,10 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
-/* why mon_backtrace need the three arguments? */
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	//read ebp, eip, and get the arguments for mon_backtrace
-	unsigned int *ebp = 0;
-	unsigned int eip, last_ebp, arg1, arg2, arg3, arg4, arg5;
-	int start = 1; 
-	struct Eipdebuginfo eip_debug_info;
-	//read the last ebp, and if ebp doesn't equal 0, then print the information(ebp, eip, and so on).
-	do{
-		if (start) {
-			ebp = (unsigned int *)read_ebp();
-			start = 0;
-		} else {
-			ebp = (unsigned int *)last_ebp;
-		}
-		last_ebp = *ebp;
-		eip = *(ebp + 1);
-		arg1 = *(ebp + 2);
-		arg2 = *(ebp + 3);
-		arg3 = *(ebp + 4);
-		arg4 = *(ebp + 5);
-		arg5 = *(ebp + 6);
-		
-		//output format: ebp f0109e58  eip f0100a62  args 00000001 f0109e80 f0109e98 f0100ed2 00000031
-		cprintf("ebp %8.08x  eip %8.08x  args %8.08x %8.08x %8.08x %8.08x %8.08x\n",ebp,eip,arg1,arg2,arg3,arg4,arg5);
-		
-		if( debuginfo_eip(eip, &eip_debug_info) == 0 ){
-			//output format:        kern/monitor.c:143: monitor+106
-			cprintf("       %s:%d: ", eip_debug_info.eip_file, eip_debug_info.eip_line);
-			cprintf("%.*s", eip_debug_info.eip_fn_namelen, eip_debug_info.eip_fn_name);
-			//cprintf("+%u\n", *((unsigned int *)eip_debug_info.eip_fn_addr));
-			cprintf("+%u\n", eip_debug_info.eip_fn_addr);
-		} else {
-			cprintf("       can't find line info!\n");
-		}
-	} while (last_ebp != 0);
+	// Your code here.
 	return 0;
 }
 
@@ -150,7 +116,7 @@ monitor(struct Trapframe *tf)
 
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
-	//mon_backtrace(0, 0, 0);
+
 
 	while (1) {
 		buf = readline("K> ");
