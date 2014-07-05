@@ -19,6 +19,7 @@ pde_t *kern_pgdir;		// Kernel's initial page directory
 struct Page *pages;		// Physical page state array
 static struct Page *page_free_list;	// Free list of physical pages
 
+static void set_used_pages(physaddr_t start_addr, physaddr_t end_addr); 
 
 // --------------------------------------------------------------
 // Detect machine's physical memory setup.
@@ -161,6 +162,7 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs = (struct Env*) boot_alloc(sizeof(struct Env) * NENV);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -186,9 +188,9 @@ mem_init(void)
 	// Your code goes here:
 	int i;
 	uintptr_t upages_addr = UPAGES;
-	uintptr_t upages_end_addr = UPAGES + ROUNDUP(npages*sizeof(struct Page), PGSIZE);
-	physaddr_t phys_addr = (uint32_t) pages - KERNBASE;
-	for (i=0; upages_addr < upages_end_addr; upages_addr += PGSIZE, phys_addr += PGSIZE) {
+	uintptr_t upages_end_addr = UPAGES + ROUNDUP(npages * sizeof(struct Page), PGSIZE);
+	physaddr_t phys_addr = PADDR(pages);
+	for (; upages_addr < upages_end_addr; upages_addr += PGSIZE,  phys_addr += PGSIZE) {
 		struct Page *page = pa2page(phys_addr);
 		page_insert(kern_pgdir, page, (void *)upages_addr, PTE_U);
 	}
@@ -200,6 +202,14 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	uintptr_t envs_addr = UENVS;
+	uintptr_t envs_end_addr = UENVS + ROUNDUP(NENV * sizeof(struct Env), PGSIZE);
+	phys_addr = PADDR(envs);
+	for (; envs_addr < envs_end_addr; envs_addr += PGSIZE, phys_addr += PGSIZE) {
+		struct Page *page = pa2page(phys_addr);
+		page_insert(kern_pgdir, page, (void *)envs_addr, PTE_U);
+	}
+	
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -295,6 +305,8 @@ void
 page_init(void)
 {
 	extern pde_t entry_pgdir[];
+	extern char end[];
+	physaddr_t start_addr, end_addr;
 	// The example code here marks all physical pages as free.
 	// However this is not truly the case.  What memory is free?
 	//  1) Mark physical page 0 as in use.
@@ -321,62 +333,51 @@ page_init(void)
 	
 	//cprintf("page_init: start\n");
 	//page 0
-	pages[0].pp_ref = 1;
-	pages[1].pp_link = 0;
+	set_used_pages(0, PGSIZE);
 	
 	//cprintf("page_init: page 0 OK\n");
 	
 	//IO hole [IOPHYSMEM, EXTPHYSMEM)
-	unsigned int start_addr = IOPHYSMEM;
-	struct Page *saved_page_free_list;
-	i = IOPHYSMEM / PGSIZE;
-	saved_page_free_list = pages[i].pp_link;
-	for (; start_addr < EXTPHYSMEM; start_addr += PGSIZE, i++) {
-		pages[i].pp_ref = 1;
-		pages[i].pp_link = 0;
-	}
-	pages[i].pp_link = saved_page_free_list;
-	
+	set_used_pages(IOPHYSMEM, EXTPHYSMEM);
 	//cprintf("page_init: IO hole OK\n");
 	
 	//TODO: the kernel -- how much memory use for kernel(code, data, stack)?
 	//kernel code memory
 	start_addr = 0x100000;
-	i = start_addr / PGSIZE;
-	saved_page_free_list = pages[i].pp_link;
-	extern char end[];
-	unsigned int end_addr = (unsigned int)(ROUNDUP((char *) end, PGSIZE) - KERNBASE);
-	for (; start_addr < end_addr; start_addr += PGSIZE, i++) {
-		pages[i].pp_ref = 1;
-		pages[i].pp_link = 0;
-	}
-	pages[i].pp_link = saved_page_free_list;
+    end_addr = (unsigned int)(ROUNDUP((char *) end, PGSIZE) - KERNBASE);
+	set_used_pages(start_addr, end_addr);
 	
 	//page dir
-	start_addr = (uint32_t)kern_pgdir - KERNBASE;
+	start_addr = PADDR((void *)kern_pgdir);
 	end_addr = start_addr + PGSIZE;
-	i = start_addr / PGSIZE;
-	saved_page_free_list = pages[i].pp_link;
-	for(; start_addr < end_addr; start_addr += PGSIZE, i++) {
-		pages[i].pp_ref = 1;
-		pages[i].pp_link = 0;
-	}
-	pages[i].pp_link = saved_page_free_list;
+	set_used_pages(start_addr, end_addr);
 	
 	//struct Pages
-	start_addr = (uint32_t)pages - KERNBASE;
-	//cprintf("addr of pages = %8.8x\n", (unsigned int)pages);
-    end_addr = start_addr + npages * sizeof(struct Page);
-	i = start_addr / PGSIZE;
-	saved_page_free_list = pages[i].pp_link;
-	for (; start_addr < end_addr; start_addr += PGSIZE, i++) {
-		pages[i].pp_ref = 1;
-		pages[i].pp_link = 0;
-	}
-	pages[i].pp_link = saved_page_free_list;
+	start_addr = PADDR((void *)pages);
+	end_addr = start_addr + npages * sizeof(struct Page);
+	set_used_pages(start_addr, end_addr);
+	
+	//struct envs
+	start_addr = PADDR((void *)envs);
+	end_addr = start_addr + NENV * sizeof(struct Env);
+	set_used_pages(start_addr, end_addr);
 	
 	//cprintf("first free page pa = %uK\n", page2pa(page_free_list)/1024);
 	//cprintf("page_init: struct Pages OK\n");
+}
+
+
+//set physical memory [start_addr, end_addr) be used
+static void 
+set_used_pages(physaddr_t start_addr, physaddr_t end_addr) 
+{
+	int i = start_addr / PGSIZE;
+	struct Page * saved_page_free_list = pages[i].pp_link;
+	for (; start_addr < end_addr; start_addr += PGSIZE, i++) {
+		pages[i].pp_ref = 1;
+		pages[i].pp_link = 0;
+	}
+	pages[i].pp_link = saved_page_free_list;
 }
 
 //

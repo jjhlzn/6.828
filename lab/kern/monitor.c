@@ -16,14 +16,14 @@
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
 static void get_pte_permission_desc(uint16_t pte_permission, char *msg);
-static void show_pte_mappings(int pdx, intptr_t from_addr, intptr_t end_addr);
+static void show_pte_mappings(int pdx, uintptr_t from_addr, uintptr_t end_addr);
 static int parse_str2int(char *str);
 static int atoi(char *str, int base);
-static void dump_virtual_mem (intptr_t start_addr, intptr_t end_addr);
-static void dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr);
-static void dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr);
-static void dump_prefix_empty (intptr_t start_addr);
-static void dump_db (intptr_t addr, uint32_t dw);
+static void dump_virtual_mem (uintptr_t start_addr, uintptr_t end_addr);
+static void dump_virtual_mem_per_pde(uintptr_t start_addr, uintptr_t end_addr);
+static void dump_virtual_mem_per_pte(uintptr_t start_addr, uintptr_t end_addr);
+static void dump_prefix_empty (uintptr_t start_addr);
+static void dump_db (uintptr_t addr, uint32_t dw);
 static void dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr);
 
 #define DW_COUNT_PER_LINE  4 //show how many double worlds per line
@@ -84,7 +84,7 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 		return 0;
 	}
 	
-	intptr_t start_virtual = 0, end_virtual = 0;
+	uintptr_t start_virtual = 0, end_virtual = 0;
 	uint16_t permission = 0;
 	if (argc == 3) {
 		start_virtual = (int32_t) parse_str2int(argv[1]);
@@ -109,7 +109,7 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 				end_ptx = PTX(end_virtual);
 			else
 				end_ptx = NPTENTRIES - 1;
-			intptr_t base_addr = i * PTSIZE;
+			uintptr_t base_addr = i * PTSIZE;
 			for (; j <= end_ptx; j++) {
 				pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
 				if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
@@ -132,11 +132,11 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		return 0;
 	}
 	
-	intptr_t from_addr = 0, end_addr = 0xffffffff;
+	uintptr_t from_addr = 0, end_addr = 0xffffffff;
 	
 	if (argc == 3) {
-		from_addr = (intptr_t) parse_str2int(argv[1]);
-		end_addr = (intptr_t) parse_str2int(argv[2]);
+		from_addr = (uintptr_t) parse_str2int(argv[1]);
+		end_addr = (uintptr_t) parse_str2int(argv[2]);
 	} 
 	
 	//cprintf("from_addr = %x\n",from_addr);
@@ -254,7 +254,7 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 	}
 	
 	int use_virtual = 1;
-	intptr_t start_addr = 0, end_addr = 0;
+	uintptr_t start_addr = 0, end_addr = 0;
 	
 	if (argc == 4) {
 		if (argv[1][0] == '-' && argv[1][1] == 'p' && argv[1][2] == 0) {
@@ -265,11 +265,11 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 			cprintf("usage: dump [-p|-v] start_addr end_addr\n");
 			return 0;
 		}
-		start_addr = (intptr_t)parse_str2int(argv[2]);
-		end_addr = (intptr_t)parse_str2int(argv[3]);
+		start_addr = (uintptr_t)parse_str2int(argv[2]);
+		end_addr = (uintptr_t)parse_str2int(argv[3]);
 	} else {
-		start_addr = (intptr_t)parse_str2int(argv[1]);
-		end_addr = (intptr_t)parse_str2int(argv[2]);
+		start_addr = (uintptr_t)parse_str2int(argv[1]);
+		end_addr = (uintptr_t)parse_str2int(argv[2]);
 	}
 	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	end_addr -= 1;
@@ -298,13 +298,13 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 } 		
 
 static void 
-dump_virtual_mem (intptr_t start_addr, intptr_t end_addr)
+dump_virtual_mem (uintptr_t start_addr, uintptr_t end_addr)
 {
-	intptr_t addr;
+	uintptr_t addr;
 	for (addr = start_addr; addr <= end_addr; addr = (PDX(addr)+1) * PTSIZE) {
 		int pdx = PDX(addr);
-		intptr_t base_addr = pdx * PTSIZE;
-		intptr_t pde_end_addr = (uint32_t)((pdx + 1) * PTSIZE - 1);
+		uintptr_t base_addr = pdx * PTSIZE;
+		uintptr_t pde_end_addr = (uint32_t)((pdx + 1) * PTSIZE - 1);
 		dump_virtual_mem_per_pde(addr, pde_end_addr < end_addr ? pde_end_addr : end_addr);
 	}
 	cprintf("\n");
@@ -319,7 +319,7 @@ dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr)
 //dump memory contents for virtual address region [from_virtual, end_virtual].
 //NOTE: [from_virtual, end_virtual] should be the same pde
 static void 
-dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
+dump_virtual_mem_per_pde(uintptr_t start_addr, uintptr_t end_addr)
 {
 	cprintf("dump_virtual_mem_per_pde: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	int pdx = PDX(start_addr);
@@ -334,7 +334,7 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 		return;	
 	}
 
-	intptr_t base_addr = pdx * PTSIZE;
+	uintptr_t base_addr = pdx * PTSIZE;
 	if (pde & PTE_PS) {
 		if (pde & PTE_P) {
 			uint32_t start_offset = BIGPGOFF(start_addr), end_offset = BIGPGOFF(end_addr);
@@ -347,10 +347,10 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 			cprintf("[%8.08-%8.08x] page present bit is 0\n", start_addr, end_addr);
 		}
 	} else {
-		intptr_t addr = start_addr;
+		uintptr_t addr = start_addr;
 		for (; addr <= end_addr; addr = base_addr+ (PTX(addr) + 1) * PGSIZE) {
 			int ptx = PTX(addr);
-			intptr_t pte_end_addr = (uint32_t)(base_addr + (ptx + 1) * PGSIZE - 1);
+			uintptr_t pte_end_addr = (uint32_t)(base_addr + (ptx + 1) * PGSIZE - 1);
 			dump_virtual_mem_per_pte(addr,  pte_end_addr < end_addr ? pte_end_addr : end_addr);
 		}
 	}
@@ -362,7 +362,7 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 //NOTE: [from_virtual, end_virtual] should be in the same pte
 		
 static void 
-dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
+dump_virtual_mem_per_pte(uintptr_t start_addr, uintptr_t end_addr)
 {
 	cprintf("dump_virtual_mem_per_pte: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	assert(start_addr % (uint32_t)4 == 0);
@@ -370,7 +370,7 @@ dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
 	int ptx = PTX(start_addr);
 	assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
 
-	intptr_t addr;
+	uintptr_t addr;
 	for (addr = start_addr; addr <= end_addr; addr += 4) {
 		dump_db(addr, *(uint32_t *)addr);
 	}
@@ -378,7 +378,7 @@ dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
 }
 
 static void 
-dump_prefix_empty (intptr_t start_addr)
+dump_prefix_empty (uintptr_t start_addr)
 {
 	assert(start_addr % (uint32_t)4 == 0);
 	uint32_t pos = start_addr / (uint32_t)4;
@@ -395,7 +395,7 @@ dump_prefix_empty (intptr_t start_addr)
 }
 
 static void 
-dump_db (intptr_t addr, uint32_t dw) 
+dump_db (uintptr_t addr, uint32_t dw) 
 {
 	assert(addr % (uint32_t)4 == 0);
 	uint32_t pos = addr / (uint32_t)4;
@@ -434,7 +434,7 @@ get_pte_permission_desc(uint16_t pte_permission, char *msg)
 //NOTE: 1. it's not 4M Page
 //      2. pdx memory region should have intersector with [from_virtual, end_virtual]
 static void
-show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual) 
+show_pte_mappings(int pdx, uintptr_t from_virtual, uintptr_t end_virtual) 
 {
 	extern pde_t *kern_pgdir;
 	uintptr_t base_addr = pdx * PTSIZE;
