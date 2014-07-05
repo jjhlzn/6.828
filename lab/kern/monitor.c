@@ -11,6 +11,7 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <kern/pmap.h>
+#include <kern/trap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -120,7 +121,7 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 		}
 	}
 	return 0;
-}
+}	
 
 int 
 mon_showmappings(int argc, char **argv, struct Trapframe *tf)
@@ -242,7 +243,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 	
 	return 0;
 }
-
+		
 int 
 mon_dump(int argc, char **argv, struct Trapframe *tf)
 {
@@ -294,7 +295,7 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 		dump_phys_mem(start_addr, end_addr);
 	}
 	return 0;
-} 
+} 		
 
 static void 
 dump_virtual_mem (intptr_t start_addr, intptr_t end_addr)
@@ -314,7 +315,6 @@ dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr)
 {
 	dump_virtual_mem(KERNBASE + start_addr, KERNBASE + end_addr);
 }
-
 
 //dump memory contents for virtual address region [from_virtual, end_virtual].
 //NOTE: [from_virtual, end_virtual] should be the same pde
@@ -355,6 +355,7 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 		}
 	}
 }
+
 
 //dump memory contents for virtual address region [start_addr, end_addr]. 
 //the arguments are virtual addresses.
@@ -633,7 +634,9 @@ monitor(struct Trapframe *tf)
 
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
-	//mon_backtrace(0, 0, 0);
+
+	if (tf != NULL)
+		print_trapframe(tf);
 
 	while (1) {
 		buf = readline("K> ");
