@@ -20,4 +20,25 @@ void print_trapframe(struct Trapframe *tf);
 void page_fault_handler(struct Trapframe *);
 void backtrace(struct Trapframe *);
 
+void handler0(void);
+void handler1(void);
+void handler2(void);
+void handler3(void);
+void handler4(void);
+void handler5(void);
+void handler6(void);
+void handler7(void);
+void handler8(void);
+//void handler9(void);
+void handler10(void);
+void handler11(void);
+void handler12(void);
+void handler13(void);
+void handler14(void);
+//void handler15(void);
+void handler16(void);
+void handler17(void);
+void handler18(void);
+void handler19(void);
+
 #endif /* JOS_KERN_TRAP_H */
