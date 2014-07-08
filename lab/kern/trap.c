@@ -65,26 +65,26 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-	SETGATE(idt[0], 1, GD_KD, (uint32_t)handler0, 0);
-	SETGATE(idt[1], 1, GD_KD, (uint32_t)handler1, 0);
-	SETGATE(idt[2], 1, GD_KD, (uint32_t)handler2, 0);
-	SETGATE(idt[3], 1, GD_KD, (uint32_t)handler3, 0);
-	SETGATE(idt[4], 1, GD_KD, (uint32_t)handler4, 0);
-	SETGATE(idt[5], 1, GD_KD, (uint32_t)handler5, 0);
-	SETGATE(idt[6], 1, GD_KD, (uint32_t)handler6, 0);
-	SETGATE(idt[7], 1, GD_KD, (uint32_t)handler7, 0);
-	SETGATE(idt[8], 1, GD_KD, (uint32_t)handler8, 0);
-	//SETGATE(idt[9], 1, GD_KD, (uint32_t)handler9, 0);  //Reserved
-	SETGATE(idt[10], 1, GD_KD, (uint32_t)handler10, 0);
-	SETGATE(idt[11], 1, GD_KD, (uint32_t)handler11, 0);
-	SETGATE(idt[12], 1, GD_KD, (uint32_t)handler12, 0);
-	SETGATE(idt[13], 1, GD_KD, (uint32_t)handler13, 0);
-	SETGATE(idt[14], 1, GD_KD, (uint32_t)handler14, 0);
-	//SETGATE(idt[15], 1, GD_KD, (uint32_t)handler15, 0); //Reserved
-	SETGATE(idt[16], 1, GD_KD, (uint32_t)handler16, 0);
-	SETGATE(idt[17], 1, GD_KD, (uint32_t)handler17, 0);
-	SETGATE(idt[18], 1, GD_KD, (uint32_t)handler18, 0);
-	SETGATE(idt[19], 1, GD_KD, (uint32_t)handler19, 0);
+	SETGATE(idt[0], 1, GD_KT, (uint32_t)handler0, 0);
+	SETGATE(idt[1], 1, GD_KT, (uint32_t)handler1, 0);
+	SETGATE(idt[2], 1, GD_KT, (uint32_t)handler2, 0);
+	SETGATE(idt[3], 1, GD_KT, (uint32_t)handler3, 0);
+	SETGATE(idt[4], 1, GD_KT, (uint32_t)handler4, 0);
+	SETGATE(idt[5], 1, GD_KT, (uint32_t)handler5, 0);
+	SETGATE(idt[6], 1, GD_KT, (uint32_t)handler6, 0);
+	SETGATE(idt[7], 1, GD_KT, (uint32_t)handler7, 0);
+	SETGATE(idt[8], 1, GD_KT, (uint32_t)handler8, 0);
+	//SETGATE(idt[9], 1, GD_KT, (uint32_t)handler9, 0);  //Reserved
+	SETGATE(idt[10], 1, GD_KT, (uint32_t)handler10, 0);
+	SETGATE(idt[11], 1, GD_KT, (uint32_t)handler11, 0);
+	SETGATE(idt[12], 1, GD_KT, (uint32_t)handler12, 0);
+	SETGATE(idt[13], 1, GD_KT, (uint32_t)handler13, 0);
+	SETGATE(idt[14], 1, GD_KT, (uint32_t)handler14, 0);
+	//SETGATE(idt[15], 1, GD_KT, (uint32_t)handler15, 0); //Reserved
+	SETGATE(idt[16], 1, GD_KT, (uint32_t)handler16, 0);
+	SETGATE(idt[17], 1, GD_KT, (uint32_t)handler17, 0);
+	SETGATE(idt[18], 1, GD_KT, (uint32_t)handler18, 0);
+	SETGATE(idt[19], 1, GD_KT, (uint32_t)handler19, 0);
 	
 	
 	// Per-CPU setup 

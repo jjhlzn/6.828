@@ -71,14 +71,14 @@ TRAPHANDLER_NOEC(handler19, T_SIMDERR)
  * Lab 3: Your code here for _alltraps
  */
 _alltraps:
-
-	pushw %es  //+6
-	pushw $0   //+4
-	pushw %ds  //+2
-	pushw $0   //+0
-	pushal;     //+8
-	movw GD_KD, %ds
-	movw GD_KD, %es
+	pushw $0  
+	pushw %es  
+	pushw $0  
+	pushw %ds  
+	pushal
+	movw $GD_KD, %ax
+	movw %ax, %ds
+	movw %ax, %es
 	pushl %esp
 	call trap
 
