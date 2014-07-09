@@ -573,17 +573,12 @@ struct Page *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	pte_t *pte = pgdir_walk(pgdir, va, 0);
-	if (pte == NULL)
-		return NULL;
-	
-	if (!(*pte & PTE_P))
-		return NULL;
-		
+	pte_t *ptep = pgdir_walk(pgdir, va, 0);
 	if (pte_store)
-		*pte_store = pte;
-	cprintf("pa = %8.8x\n",PTE_ADDR(pte));
-	return pa2page(PTE_ADDR(pte));
+		*pte_store = ptep;
+	if (ptep == NULL || !(*ptep))
+		return NULL;
+	return pa2page(PTE_ADDR(*ptep));
 }
 
 //

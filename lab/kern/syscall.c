@@ -21,11 +21,9 @@ sys_cputs(const char *s, size_t len)
 	// Destroy the environment if not.
 
 	// LAB 3: Your code here.
-	cprintf("s = %8.8x\n",s);
-	struct Env *envp = NULL;
-	int r;
-	if ((r=envid2env(curenv->env_id, &envp, 1)) < 0) 
-		panic("sys_cputs: %e", r);
+	struct Env *envp = curenv;
+	if(!envp)
+		panic("curenv is NULL");
 		
 	pte_t *ptep = NULL;
 	page_lookup(envp->env_pgdir, (void *)s, &ptep);

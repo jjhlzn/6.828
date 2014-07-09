@@ -12,6 +12,7 @@
 #include <kern/kdebug.h>
 #include <kern/pmap.h>
 #include <kern/trap.h>
+#include <kern/env.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -25,6 +26,7 @@ static void dump_virtual_mem_per_pte(uintptr_t start_addr, uintptr_t end_addr);
 static void dump_prefix_empty (uintptr_t start_addr);
 static void dump_db (uintptr_t addr, uint32_t dw);
 static void dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr);
+static pde_t *get_curenv_or_kernel_pgdir();
 
 #define DW_COUNT_PER_LINE  4 //show how many double worlds per line
 //4M page offset
@@ -77,7 +79,7 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 
 int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 {
-	extern pde_t *kern_pgdir;
+	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
 	//check parameters
 	if (argc != 3 && argc != 4) {
 		cprintf("usage: setptpermission virtual_addr permission or setptpermission start_virtual end_virtual permission\n");
@@ -95,6 +97,11 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 		end_virtual = (int32_t) parse_str2int(argv[2]);
 		permission = (uint16_t)parse_str2int(argv[3]);
 	}
+	
+	if (curenv && curenv->env_status != ENV_FREE)
+		cprintf("set page table permission for env[%d].\n", curenv->env_id);
+	else 
+		cprintf("set page table permission for kernel.\n");
 	
 	int i,j,end_ptx;
 	for (i=PDX(start_virtual); i<=PDX(end_virtual); i++) {
@@ -139,9 +146,11 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		end_addr = (uintptr_t) parse_str2int(argv[2]);
 	} 
 	
-	//cprintf("from_addr = %x\n",from_addr);
-	//cprintf("end_addr = %x\n",end_addr);
-	extern pde_t *kern_pgdir;
+	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
+	if (curenv && curenv->env_status != ENV_FREE)
+		cprintf("env[%d] page table mapping:\n", curenv->env_id);
+	else 
+		cprintf("kernel page table mapping:\n");
 	int i,j;
 	for (i=PDX(from_addr); i<=PDX(end_addr); ) {
 		int start_pdx = i, end_pdx;
@@ -171,7 +180,8 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 					if (start_phys_addr + (j-i) * PTSIZE != (kern_pgdir[j] & 0xffc00000)) 
 						break;
 				} else {
-					//check whether pte has the same permisson, and phys memory address should be continuous.
+					//check whether pte has the same permisson, and phys memory address
+					// should be continuous.
 					int k;
 					int is_goto_outer = 0;
 					for (k=0; k<NPTENTRIES; k++) {
@@ -321,12 +331,12 @@ dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr)
 static void 
 dump_virtual_mem_per_pde(uintptr_t start_addr, uintptr_t end_addr)
 {
-	cprintf("dump_virtual_mem_per_pde: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	//cprintf("dump_virtual_mem_per_pde: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	int pdx = PDX(start_addr);
 	assert(start_addr < end_addr);
 	assert(end_addr < start_addr + PTSIZE);
 	
-	extern pde_t *kern_pgdir;
+	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
 	pde_t pde = kern_pgdir[pdx];
 	
 	if (pde == 0) { //haven't mapped
@@ -348,6 +358,7 @@ dump_virtual_mem_per_pde(uintptr_t start_addr, uintptr_t end_addr)
 		}
 	} else {
 		uintptr_t addr = start_addr;
+		dump_prefix_empty(start_addr);
 		for (; addr <= end_addr; addr = base_addr+ (PTX(addr) + 1) * PGSIZE) {
 			int ptx = PTX(addr);
 			uintptr_t pte_end_addr = (uint32_t)(base_addr + (ptx + 1) * PGSIZE - 1);
@@ -364,11 +375,13 @@ dump_virtual_mem_per_pde(uintptr_t start_addr, uintptr_t end_addr)
 static void 
 dump_virtual_mem_per_pte(uintptr_t start_addr, uintptr_t end_addr)
 {
-	cprintf("dump_virtual_mem_per_pte: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	//cprintf("dump_virtual_mem_per_pte: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	assert(start_addr % (uint32_t)4 == 0);
 	assert((uint32_t)(end_addr % (uint32_t)4) == 3);
-	int ptx = PTX(start_addr);
-	assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
+	//int ptx = PTX(start_addr);
+	//cprintf("(ptx + 1) * PGSIZE - 1 = %8.8x\n",(ptx + 1) * PGSIZE - 1);
+	//cprintf("end_addr = %8.8x\n", end_addr);
+	//assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
 
 	uintptr_t addr;
 	for (addr = start_addr; addr <= end_addr; addr += 4) {
@@ -385,10 +398,10 @@ dump_prefix_empty (uintptr_t start_addr)
 	assert(start_addr % (uint32_t)4 == 0);
 	
 	if (pos % (uint32_t)DW_COUNT_PER_LINE > 0){
-		cprintf("%8.08x-%8.08x: ", start_addr, (uint32_t)(start_addr + DW_COUNT_PER_LINE * 4));
+		
 		int j;
 		uint32_t skiped_count = (pos % (uint32_t)DW_COUNT_PER_LINE);
-		
+		cprintf("%8.08x-%8.08x: ", start_addr - skiped_count * 4, (uint32_t)(start_addr - skiped_count * 4 + DW_COUNT_PER_LINE * 4));
 		for (j=0; j < skiped_count; j++)
 			cprintf("          "); //ten spaces
 	}
@@ -436,7 +449,7 @@ get_pte_permission_desc(uint16_t pte_permission, char *msg)
 static void
 show_pte_mappings(int pdx, uintptr_t from_virtual, uintptr_t end_virtual) 
 {
-	extern pde_t *kern_pgdir;
+	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
 	uintptr_t base_addr = pdx * PTSIZE;
 	uint16_t pte_permission;
 	
@@ -655,4 +668,13 @@ read_eip()
 	uint32_t callerpc;
 	__asm __volatile("movl 4(%%ebp), %0" : "=r" (callerpc));
 	return callerpc;
+}
+
+static pde_t *
+get_curenv_or_kernel_pgdir()
+{
+	extern pde_t *kern_pgdir;
+	if (curenv && curenv->env_status != ENV_FREE)
+		return curenv->env_pgdir;
+	return kern_pgdir;
 }
