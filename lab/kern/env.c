@@ -121,6 +121,7 @@ env_init(void)
 	for (i=0; i < NENV; i++) {
 		memset(envs + i, 0, sizeof(struct Env));
 		envs[i].env_id = 0;
+		envs[i].env_tf.tf_eflags =0x00000202;
 		//TODO: I'm not sure that env_link is linked by this way!
 		if (i+1 < NENV)
 			envs[i].env_link = envs + i + 1;
@@ -245,6 +246,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	// of a prior environment inhabiting this Env structure
 	// from "leaking" into our new environment.
 	memset(&e->env_tf, 0, sizeof(e->env_tf));
+	
 
 	// Set up appropriate initial values for the segment registers.
 	// GD_UD is the user data segment selector in the GDT, and

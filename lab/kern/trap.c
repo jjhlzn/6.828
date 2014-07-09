@@ -68,7 +68,7 @@ trap_init(void)
 	SETGATE(idt[0], 1, GD_KT, (uint32_t)handler0, 0);
 	SETGATE(idt[1], 1, GD_KT, (uint32_t)handler1, 0);
 	SETGATE(idt[2], 1, GD_KT, (uint32_t)handler2, 0);
-	SETGATE(idt[3], 1, GD_KT, (uint32_t)handler3, 0);
+	SETGATE(idt[3], 1, GD_KT, (uint32_t)handler3, 3);
 	SETGATE(idt[4], 1, GD_KT, (uint32_t)handler4, 0);
 	SETGATE(idt[5], 1, GD_KT, (uint32_t)handler5, 0);
 	SETGATE(idt[6], 1, GD_KT, (uint32_t)handler6, 0);
@@ -78,8 +78,8 @@ trap_init(void)
 	SETGATE(idt[10], 1, GD_KT, (uint32_t)handler10, 0);
 	SETGATE(idt[11], 1, GD_KT, (uint32_t)handler11, 0);
 	SETGATE(idt[12], 1, GD_KT, (uint32_t)handler12, 0);
-	SETGATE(idt[13], 1, GD_KT, (uint32_t)handler13, 0);
-	SETGATE(idt[14], 1, GD_KT, (uint32_t)handler14, 0);
+	SETGATE(idt[T_GPFLT], 1, GD_KT, (uint32_t)handler13, 0);
+	SETGATE(idt[T_PGFLT], 1, GD_KT, (uint32_t)handler14, 0);
 	//SETGATE(idt[15], 1, GD_KT, (uint32_t)handler15, 0); //Reserved
 	SETGATE(idt[16], 1, GD_KT, (uint32_t)handler16, 0);
 	SETGATE(idt[17], 1, GD_KT, (uint32_t)handler17, 0);
@@ -111,6 +111,9 @@ trap_init_percpu(void)
 
 	// Load the IDT
 	lidt(&idt_pd);
+	
+	//open interrupt
+	//asm volatile("sti");
 	
 }
 
@@ -168,6 +171,9 @@ trap_dispatch(struct Trapframe *tf)
 	switch (tf->tf_trapno) {
 		case T_PGFLT:
 			page_fault_handler(tf);
+			break;
+		case T_BRKPT:
+			breakpoint_exception_handler(tf);
 			break;
 	}
 
@@ -242,5 +248,11 @@ page_fault_handler(struct Trapframe *tf)
 		curenv->env_id, fault_va, tf->tf_eip);
 	print_trapframe(tf);
 	env_destroy(curenv);
+}
+
+void 
+breakpoint_exception_handler(struct Trapframe *tf)
+{
+	monitor(tf);
 }
 
