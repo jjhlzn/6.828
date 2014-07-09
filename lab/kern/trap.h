@@ -41,5 +41,6 @@ void handler16(void);
 void handler17(void);
 void handler18(void);
 void handler19(void);
+void handler48(void);
 
 #endif /* JOS_KERN_TRAP_H */

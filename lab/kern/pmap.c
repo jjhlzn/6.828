@@ -582,7 +582,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 		
 	if (pte_store)
 		*pte_store = pte;
-	
+	cprintf("pa = %8.8x\n",PTE_ADDR(pte));
 	return pa2page(PTE_ADDR(pte));
 }
 
