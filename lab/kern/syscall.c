@@ -21,16 +21,17 @@ sys_cputs(const char *s, size_t len)
 	// Destroy the environment if not.
 
 	// LAB 3: Your code here.
-	struct Env *envp = curenv;
-	if(!envp)
+	user_mem_assert(curenv, (void *)s, len, PTE_U);
+	
+	if(!curenv)
 		panic("curenv is NULL");
 		
 	pte_t *ptep = NULL;
-	page_lookup(envp->env_pgdir, (void *)s, &ptep);
+	page_lookup(curenv->env_pgdir, (void *)s, &ptep);
 	if (ptep == NULL) {
 		cprintf("env[%d] dont't have permission to read memory [%8.08x, %8.08x]\n",
 			  curenv->env_id, s, s+len);
-		env_destroy(envp);
+		env_destroy(curenv);
 	}
 
 	// Print the string supplied by the user.
