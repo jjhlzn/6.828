@@ -21,6 +21,7 @@ sys_cputs(const char *s, size_t len)
 	// Destroy the environment if not.
 
 	// LAB 3: Your code here.
+	//cprintf("s = %8.8x, len=%d\n",s,len);
 	user_mem_assert(curenv, (void *)s, len, PTE_U);
 	
 	if(!curenv)

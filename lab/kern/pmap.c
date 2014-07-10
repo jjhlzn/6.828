@@ -660,7 +660,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	int r = 0;
 	uint32_t v_addr = (uint32_t)va;
 	if (v_addr >= ULIM || (v_addr + len) >= ULIM) {
-		user_mem_check_addr = ULIM;
+		user_mem_check_addr = v_addr > ULIM ? v_addr : ULIM ;
 		r = -E_FAULT;
 	} else {
 		uint32_t va_pgaligned = ROUNDDOWN(v_addr, PGSIZE);

@@ -376,6 +376,7 @@ dump_virtual_mem_per_pde(uintptr_t start_addr, uintptr_t end_addr)
 static void 
 dump_virtual_mem_per_pte(uintptr_t start_addr, uintptr_t end_addr)
 {
+	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
 	//cprintf("dump_virtual_mem_per_pte: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	assert(start_addr % (uint32_t)4 == 0);
 	assert((uint32_t)(end_addr % (uint32_t)4) == 3);
@@ -383,7 +384,13 @@ dump_virtual_mem_per_pte(uintptr_t start_addr, uintptr_t end_addr)
 	//cprintf("(ptx + 1) * PGSIZE - 1 = %8.8x\n",(ptx + 1) * PGSIZE - 1);
 	//cprintf("end_addr = %8.8x\n", end_addr);
 	//assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
-
+	pte_t *ptep = NULL;
+	page_lookup(kern_pgdir, (void *)start_addr, &ptep);
+	if (!ptep || !(*ptep & PTE_P)){
+		cprintf("%8.08x-%8.08x: not mapped\n", start_addr, end_addr);
+		return;
+	}
+	
 	uintptr_t addr;
 	for (addr = start_addr; addr <= end_addr; addr += 4) {
 		dump_db(addr, *(uint32_t *)addr);
