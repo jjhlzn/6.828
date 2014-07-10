@@ -165,7 +165,7 @@ env_init_percpu(void)
 static int
 env_setup_vm(struct Env *e)
 {
-	int i;
+	int i,j,r;
 	struct Page *p = NULL;
 
 	// Allocate a page for the page directory
@@ -193,10 +193,30 @@ env_setup_vm(struct Env *e)
 	e->env_pgdir = (pde_t *)page2kva(p);
 	
 	extern pde_t *kern_pgdir;
-	for (i=0; i<=PDX(UTOP); i++)
-		e->env_pgdir[i] = 0;
-	for (i=PDX(UTOP)+1; i<NPTENTRIES; i++){
-		e->env_pgdir[i] = kern_pgdir[i];
+	for (i=0; i<NPTENTRIES; i++){
+		//page talbe copy
+		pde_t pde = kern_pgdir[i];
+		uintptr_t base_addr = i * PTSIZE;
+		if (pde & PTE_P) {
+			if (pde & PTE_PS){
+				e->env_pgdir[i] = pde;
+			} else {
+				for (j=0; j<NPTENTRIES; j++) {
+					uintptr_t addr = base_addr + j * PGSIZE;
+					pte_t *ptep_src = NULL, *ptep_dst = NULL;
+					ptep_src = pgdir_walk(kern_pgdir, (void *)addr, 0);
+					if (ptep_src && *ptep_src) {
+						ptep_dst = pgdir_walk(e->env_pgdir, (void *)addr, 1);
+						if (!ptep_dst)
+							panic("env_setup_vm: out of memory!");
+						*ptep_dst = *ptep_src;
+					}
+				}
+			}
+		} else {
+		    e->env_pgdir[i] = 0;
+		}
+		
 	}
 	
 

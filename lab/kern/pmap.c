@@ -242,6 +242,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+	
 	//uintptr_t kern_addr = KERNBASE;
 	//phys_addr = 0;
 	//for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PGSIZE, phys_addr += PGSIZE) {
@@ -253,10 +254,10 @@ mem_init(void)
 	//}
 	
 	//set PS bit of PDE to 1, yes, use 4MB page table.
+	physaddr_t end_physaddr = npages * PGSIZE - 1;
 	uintptr_t kern_addr = KERNBASE;
 	phys_addr = 0;
 	for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PTSIZE, phys_addr += PTSIZE) {
-		//cprintf("kern_addr = %8.8x\n",kern_addr);
 		pde_t *pdep = kern_pgdir + (kern_addr >> PTSHIFT);
 		*pdep = phys_addr | PTE_PS | PTE_W | PTE_P;
 	}
@@ -576,8 +577,11 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	pte_t *ptep = pgdir_walk(pgdir, va, 0);
 	if (pte_store)
 		*pte_store = ptep;
-	if (ptep == NULL || !(*ptep))
+	if (ptep == NULL || !(*ptep) || !(*ptep & PTE_P))
 		return NULL;
+	extern size_t npages; 
+	//cprintf("PTE_ADDR(*ptep) = %8.8x, npages = %d, pgnum = %d, b = %d\n",
+	//PTE_ADDR(*ptep), npages, PGNUM(PTE_ADDR(*ptep)), PGNUM(PTE_ADDR(*ptep)) >= npages);
 	return pa2page(PTE_ADDR(*ptep));
 }
 
