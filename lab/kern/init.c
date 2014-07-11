@@ -121,6 +121,13 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
+	
+	//TODO: how to make only one CPU can enter the scheduler at a time.
+	static uint32_t lock = 0;
+	while(xchg(&lock,1) != 1)
+		;
+	sched_yield();
+	lock = 0;
 
 	// Remove this after you finish Exercise 4
 	for (;;);

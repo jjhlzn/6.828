@@ -136,7 +136,7 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	//panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -256,11 +256,10 @@ mem_init(void)
 	
 	uintptr_t kern_addr = KERNBASE;
 	phys_addr = 0;
-	for (; kern_addr < 0xffffffff && kern_addr >= KERNBASE; kern_addr += PTSIZE, phys_addr += PTSIZE) {
+	for (; kern_addr < IOMEMBASE && kern_addr >= KERNBASE; kern_addr += PTSIZE, phys_addr += PTSIZE) {
 		pde_t *pdep = kern_pgdir + (kern_addr >> PTSHIFT);
 		*pdep = phys_addr | PTE_PS | PTE_W | PTE_P;
 	}
-	
 	// Initialize the SMP-related parts of the memory map
 	mem_init_mp();
 
@@ -303,7 +302,7 @@ mem_init_mp(void)
 	// Create a direct mapping at the top of virtual address space starting
 	// at IOMEMBASE for accessing the LAPIC unit using memory-mapped I/O.
 	boot_map_region(kern_pgdir, IOMEMBASE, -IOMEMBASE, IOMEM_PADDR, PTE_W);
-
+	
 	// Map per-CPU stacks starting at KSTACKTOP, for up to 'NCPU' CPUs.
 	//
 	// For CPU i, use the physical memory that 'percpu_kstacks[i]' refers
@@ -374,7 +373,15 @@ page_init(void)
 	//page 0
 	set_used_pages(0, PGSIZE);
 	
-	//cprintf("page_init: page 0 OK\n");
+	//MPENTRY_PADDR
+	extern unsigned char mpentry_start[], mpentry_end[];
+	cprintf("mpentry_start = %8.8x, mpentry_end = %8.8x\n", 
+			mpentry_start, mpentry_end);
+	start_addr = MPENTRY_PADDR;
+	end_addr = start_addr + (uint32_t)(mpentry_end - mpentry_start);
+	cprintf("start_addr = %8.8x, end_addr = %8.8x\n", 
+			start_addr, end_addr);
+	set_used_pages(start_addr, end_addr);
 	
 	//IO hole [IOPHYSMEM, EXTPHYSMEM)
 	set_used_pages(IOPHYSMEM, EXTPHYSMEM);
@@ -401,8 +408,10 @@ page_init(void)
 	end_addr = start_addr + NENV * sizeof(struct Env);
 	set_used_pages(start_addr, end_addr);
 	
+	
 	//cprintf("first free page pa = %uK\n", page2pa(page_free_list)/1024);
 	//cprintf("page_init: struct Pages OK\n");
+	//print_freepageinfo();
 }
 
 
@@ -434,6 +443,7 @@ page_alloc(int alloc_flags)
 	// Fill this function in
 	if (page_free_list == 0) {
 		//cprintf("WARN: out of memory!\n");
+		return NULL;
 	}
 	
 	//cprintf("page_alloc: allloc pa %uK\n",page2pa(page_free_list)/1024);
@@ -501,7 +511,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		if (create) {
 			struct Page *new_page = page_alloc(ALLOC_ZERO); //used as page table page
 			if (!new_page) 
-	return NULL;
+				return NULL;
 			new_page->pp_ref++;
 			if ((uint32_t)(pgdir+PDX(va)) > 0xf0400000)
 				panic("havn't mapped\n");
@@ -530,7 +540,6 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
-	// Fill this function in
 	assert(size > 0);
 	assert(size % PGSIZE == 0);
 	
@@ -540,6 +549,8 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 		pte_t *pte = pgdir_walk(pgdir, (void *)(va + i * PGSIZE), 1);
 		if (pte == NULL)
 			panic("out of memory!");
+		if (PADDR(pte) >= 0x400000)
+			panic("no mapped memory: %8.8x!", PADDR(pte) );
 		*pte = (pa + i * PGSIZE) | perm;
 	}
 }
@@ -706,7 +717,8 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 			pte_t *ptep = NULL;
 			page_lookup(env->env_pgdir, (void *)va_pgaligned, &ptep);
 			if (!ptep || ((*ptep & (perm | PTE_P)) != (perm | PTE_P))) {
-				user_mem_check_addr = (va_pgaligned < (uint32_t)va ? (uint32_t)va : va_pgaligned);
+				user_mem_check_addr = (va_pgaligned < (uint32_t)va ? 
+					(uint32_t)va : va_pgaligned);
 				r = -E_FAULT;
 			}
 		} 
@@ -764,6 +776,8 @@ check_page_free_list(bool only_low_memory)
 		*tp[0] = pp2;
 		page_free_list = pp1;
 	}
+	
+	//print_freepageinfo();
 
 	// if there's a page that shouldn't be on the free list,
 	// try to make sure it eventually causes trouble.
@@ -886,6 +900,7 @@ check_page_alloc(void)
 static void
 check_kern_pgdir(void)
 {
+	cprintf("check_kern_pgdir: start\n");
 	uint32_t i, n;
 	pde_t *pgdir;
 
@@ -1151,4 +1166,29 @@ check_page_installed_pgdir(void)
 	page_free(pp0);
 
 	cprintf("check_page_installed_pgdir() succeeded!\n");
+}
+
+void 
+print_freepageinfo()
+{
+	int free_pages = 0;
+	int i;
+	for (i=0; i<npages; i++)
+		if (pages[i].pp_ref == 0)
+			free_pages++;
+	cprintf("total_pages = %d, free_pages = %d\n", npages, free_pages);
+	cprintf("free page list:\n");
+	struct Page *pp = page_free_list;
+	for (i=1; i<=free_pages; i++) {
+		if( pp-pages < 0)
+			break;
+		cprintf("%5d   ",pp-pages);
+		if (i % 10 == 0 && i != 0)
+			cprintf("\n");
+		else if (i+1 == free_pages)
+			cprintf("\n");
+		pp = pp->pp_link;
+		
+	}
+	
 }

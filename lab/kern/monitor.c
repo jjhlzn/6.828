@@ -46,7 +46,8 @@ static struct Command commands[] = {
 	{ "showmappings", "Display virtual memory mapping", mon_showmappings },
 	{ "setptpermission", "Set page table permission", mon_setptpermission },
 	{ "dump", "Dump memory contents", mon_dump},
-	{ "continue", "Continue execution after breakpoint exception", mon_continue}
+	{ "continue", "Continue execution after breakpoint exception", mon_continue},
+	{ "freepageinfo", "Display free page info", mon_freepageinfo}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -89,12 +90,20 @@ mon_continue(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int 
+mon_freepageinfo(int argc, char **argv, struct Trapframe *tf)
+{
+	print_freepageinfo();
+	return 0;
+}
+
 int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 {
 	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
 	//check parameters
 	if (argc != 3 && argc != 4) {
-		cprintf("usage: setptpermission virtual_addr permission or setptpermission start_virtual end_virtual permission\n");
+		cprintf("usage: setptpermission virtual_addr permission or setptpermission \
+		         start_virtual end_virtual permission\n");
 		return 0;
 	}
 	
@@ -198,18 +207,26 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 					int is_goto_outer = 0;
 					for (k=0; k<NPTENTRIES; k++) {
 						pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
-						if (!(ptep & PTE_P)) {
+
+						if (!ptep) {
 							is_goto_outer = 1;
+							//cprintf("not match for PTE_P!\n");
 							break;
 						}
+						
 						if (j == i && k == 0) {
 							pte_permission = ptep & 0xfff;
 							start_phys_addr = PTE_ADDR(ptep);
+							//cprintf("start_phys_addr = %8.8x\n",start_phys_addr);
 							continue;
 						}
+						
 						if ( ((ptep & 0xfff) != pte_permission) 
 							 || ((start_phys_addr+(j-i)*PTSIZE+k*PGSIZE) != PTE_ADDR(ptep))  ) {
+							//cprintf("start_phys_addr+(j-i)*PTSIZE+k*PGSIZE = %8.8x\n", start_phys_addr+(j-i)*PTSIZE+k*PGSIZE);
+							//cprintf("PTE_ADDR(ptep) = %8.8x\n",PTE_ADDR(ptep));
 							is_goto_outer = 1;
+							//cprintf("not match!\n");
 							break;
 						}
 					}
