@@ -22,6 +22,19 @@ sys_cputs(const char *s, size_t len)
 	// Destroy the environment if not.
 
 	// LAB 3: Your code here.
+	//cprintf("s = %8.8x, len=%d\n",s,len);
+	user_mem_assert(curenv, (void *)s, len, PTE_U);
+	
+	if(!curenv)
+		panic("curenv is NULL");
+		
+	pte_t *ptep = NULL;
+	page_lookup(curenv->env_pgdir, (void *)s, &ptep);
+	if (ptep == NULL) {
+		cprintf("env[%d] dont't have permission to read memory [%8.08x, %8.08x]\n",
+			  curenv->env_id, s, s+len);
+		env_destroy(curenv);
+	}
 
 	// Print the string supplied by the user.
 	cprintf("%.*s", len, s);
@@ -267,10 +280,28 @@ sys_ipc_recv(void *dstva)
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
 {
+	int32_t ret = -1;
 	// Call the function corresponding to the 'syscallno' parameter.
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
-
-	panic("syscall not implemented");
+	switch(syscallno){
+		case SYS_cputs:
+			sys_cputs((char *)a1, (size_t)a2);
+			break;
+		case SYS_cgetc:
+			ret = (int32_t)sys_cgetc();
+			break;
+		case SYS_getenvid:
+			ret = (int32_t)sys_getenvid();
+			break;
+		case SYS_env_destroy:
+			ret = (int32_t)sys_env_destroy((envid_t)a1);
+			break;
+		default:
+			ret = -E_INVAL;
+			break;
+	}
+	
+	return ret;
 }
 
