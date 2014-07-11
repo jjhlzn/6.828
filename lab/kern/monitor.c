@@ -45,7 +45,8 @@ static struct Command commands[] = {
 	{ "backtrace", "Dispaly stack backtrace", mon_backtrace},
 	{ "showmappings", "Display virtual memory mapping", mon_showmappings },
 	{ "setptpermission", "Set page table permission", mon_setptpermission },
-	{ "dump", "Dump memory contents", mon_dump}
+	{ "dump", "Dump memory contents", mon_dump},
+	{ "continue", "Continue execution after breakpoint exception", mon_continue}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -75,6 +76,16 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	cprintf("  end    %08x (virt)  %08x (phys)\n", end, end - KERNBASE);
 	cprintf("Kernel executable memory footprint: %dKB\n",
 		(end-entry+1023)/1024);
+	return 0;
+}
+
+int 
+mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	if (tf)
+		env_pop_tf(tf); //not return
+	else
+		cprintf("no breakpoint!\n");
 	return 0;
 }
 
