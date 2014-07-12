@@ -244,22 +244,22 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-	uintptr_t kern_addr = KERNBASE;
-	phys_addr = 0;
-	for (; kern_addr < IOMEMBASE && kern_addr >= KERNBASE; kern_addr += PGSIZE, phys_addr += PGSIZE) {
-		//cprintf("kern_addr = %8.8x\n",kern_addr);
-		pte_t *ptep = pgdir_walk(kern_pgdir, (void *)kern_addr, 1);
-		if (!ptep)
-			panic("out of memory!");
-		*ptep = phys_addr | PTE_W | PTE_P;
-	}
-	
 	//uintptr_t kern_addr = KERNBASE;
 	//phys_addr = 0;
-	//for (; kern_addr < IOMEMBASE && kern_addr >= KERNBASE; kern_addr += PTSIZE, phys_addr += PTSIZE) {
-	//	pde_t *pdep = kern_pgdir + (kern_addr >> PTSHIFT);
-	//	*pdep = phys_addr | PTE_PS | PTE_W | PTE_P;
+	//for (; kern_addr < IOMEMBASE && kern_addr >= KERNBASE; kern_addr += PGSIZE, phys_addr += PGSIZE) {
+		////cprintf("kern_addr = %8.8x\n",kern_addr);
+		//pte_t *ptep = pgdir_walk(kern_pgdir, (void *)kern_addr, 1);
+		//if (!ptep)
+			//panic("out of memory!");
+		//*ptep = phys_addr | PTE_W | PTE_P;
 	//}
+	
+	uintptr_t kern_addr = KERNBASE;
+	phys_addr = 0;
+	for (; kern_addr < IOMEMBASE && kern_addr >= KERNBASE; kern_addr += PTSIZE, phys_addr += PTSIZE) {
+		pde_t *pdep = kern_pgdir + (kern_addr >> PTSHIFT);
+		*pdep = phys_addr | PTE_PS | PTE_W | PTE_P;
+	}
 	// Initialize the SMP-related parts of the memory map
 	mem_init_mp();
 

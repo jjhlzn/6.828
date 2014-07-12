@@ -201,13 +201,14 @@ trap_dispatch(struct Trapframe *tf)
 			breakpoint_exception_handler(tf);
 			break;
 		case T_SYSCALL:
+			//cprintf("reg_eax = %d\n", tf->tf_regs.reg_eax);
 			tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, 
 										  tf->tf_regs.reg_edx, 
 										  tf->tf_regs.reg_ecx, 
 									      tf->tf_regs.reg_ebx, 
 										  tf->tf_regs.reg_edi, 
 										  tf->tf_regs.reg_esi);
-			env_pop_tf(tf);
+			env_run(curenv);
 			break;
 	}
 	// Handle spurious interrupts
@@ -250,7 +251,7 @@ trap(struct Trapframe *tf)
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
-	cprintf("Incoming TRAP frame at %p\n", tf);
+	//cprintf("Incoming TRAP frame at %p\n", tf);
 
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
