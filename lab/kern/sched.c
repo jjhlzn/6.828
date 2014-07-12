@@ -29,6 +29,31 @@ sched_yield(void)
 	// below to switch to this CPU's idle environment.
 
 	// LAB 4: Your code here.
+	struct Env *next_env = NULL;
+	int find_start_i = -1;
+	if (!curenv)
+		find_start_i = 0;
+	else 
+		find_start_i = (curenv - envs) + 1;
+		
+	//cprintf("find_sart_i = %d\n", find_start_i);
+	
+	for (i = find_start_i; i < NENV - 1; i++) {
+		if (envs[i].env_status == ENV_RUNNABLE 
+		 && envs[i].env_type != ENV_TYPE_IDLE) {
+			next_env = envs + i;
+			break;
+		}
+	}
+	
+	if (next_env == NULL && curenv && curenv->env_status == ENV_RUNNING 
+			&& curenv->env_cpunum == thiscpu->cpu_id) 
+		next_env = curenv;
+		
+	if (next_env) 
+		env_run(next_env);  //not return
+	
+	//cprintf("not found next env\n");
 
 	// For debugging and testing purposes, if there are no
 	// runnable environments other than the idle environments,
@@ -39,12 +64,13 @@ sched_yield(void)
 		     envs[i].env_status == ENV_RUNNING))
 			break;
 	}
+	//cprintf("i = %d\n", i);
 	if (i == NENV) {
 		cprintf("No more runnable environments!\n");
 		while (1)
 			monitor(NULL);
 	}
-
+	
 	// Run this CPU's idle environment when nothing else is runnable.
 	idle = &envs[cpunum()];
 	if (!(idle->env_status == ENV_RUNNABLE || idle->env_status == ENV_RUNNING))
