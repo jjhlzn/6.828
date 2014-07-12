@@ -319,7 +319,23 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	uint32_t kstacktop_i;
+	int i, j, r;
+	for (i = 0; i < NCPU; i++) {
+		kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		uint32_t base = kstacktop_i - KSTKSIZE;
+		for (j = 0; j < KSTKSIZE / PGSIZE; j++) {
+			struct Page *pp = pa2page(PADDR(&percpu_kstacks[i]) + j * PGSIZE);
+			if (!pp)
+				panic("out of memory!");
+			if ((r = page_insert(kern_pgdir, pp, 
+					(void *)(base + j * PGSIZE), PTE_W) < 0)) 
+				panic("mem_init_mp: %e", r);
+		}
+	}
+	
+	
+	
 }
 
 // --------------------------------------------------------------
@@ -551,7 +567,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 			panic("out of memory!");
 		if (PADDR(pte) >= 0x400000)
 			panic("no mapped memory: %8.8x!", PADDR(pte) );
-		*pte = (pa + i * PGSIZE) | perm;
+		*pte = (pa + i * PGSIZE) | perm | PTE_P;
 	}
 }
 
@@ -921,8 +937,11 @@ check_kern_pgdir(void)
 		assert(check_va2pa(pgdir, KERNBASE + i) == i);
 
 	// check IO mem (new in lab 4)
-	for (i = IOMEMBASE; i < -PGSIZE; i += PGSIZE)
+	for (i = IOMEMBASE; i < -PGSIZE; i += PGSIZE) {
+		if ( check_va2pa(pgdir, i) != i ) 
+			cprintf("i = %8.8x, pa(i) = %8.8x\n", i, check_va2pa(pgdir,i));
 		assert(check_va2pa(pgdir, i) == i);
+	}
 
 	// check kernel stack
 	// (updated in lab 4 to check per-CPU kernel stacks)
@@ -954,6 +973,7 @@ check_kern_pgdir(void)
 		}
 	}
 	cprintf("check_kern_pgdir() succeeded!\n");
+	panic("check_kern_pgdir() succeeded!\n");
 }
 
 // This function returns the physical address of the page containing 'va',
@@ -970,7 +990,6 @@ check_va2pa(pde_t *pgdir, uintptr_t va)
 	if (!(*pgdir & PTE_P))
 		return ~0;
 	if (*pgdir & PTE_PS) {
-		
 		physaddr_t phys_addr = (*pgdir & 0xffc00000) + (va & 0x003fffff);
 		//cprintf("phys_addr = %8.8x\n",phys_addr);
 		return phys_addr;
