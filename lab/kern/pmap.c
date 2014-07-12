@@ -973,7 +973,6 @@ check_kern_pgdir(void)
 		}
 	}
 	cprintf("check_kern_pgdir() succeeded!\n");
-	panic("check_kern_pgdir() succeeded!\n");
 }
 
 // This function returns the physical address of the page containing 'va',
