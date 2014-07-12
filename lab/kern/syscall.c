@@ -97,7 +97,22 @@ sys_exofork(void)
 	// will appear to return 0.
 
 	// LAB 4: Your code here.
-	panic("sys_exofork not implemented");
+	int r;
+	struct Env *env;
+	
+	if ((r = env_alloc(&env, curenv->env_id)) < 0) {
+		if (r == -E_NO_MEM)
+			return -E_NO_MEM;
+		else if (r == -E_NO_FREE_ENV)
+			return -E_NO_FREE_ENV;
+		panic("unknow error code %d",r);
+	}
+	
+	env->env_status = ENV_NOT_RUNNABLE;
+	env->env_tf = *curenv->env_tf;
+	env->env_tf.reg_eax = 0;
+	
+	return env->env_id;
 }
 
 // Set envid's env_status to status, which must be ENV_RUNNABLE
