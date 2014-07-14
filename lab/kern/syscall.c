@@ -24,9 +24,6 @@ sys_cputs(const char *s, size_t len)
 	// LAB 3: Your code here.
 	//cprintf("s = %8.8x, len=%d\n",s,len);
 	user_mem_assert(curenv, (void *)s, len, PTE_U);
-	
-	if(!curenv)
-		panic("curenv is NULL");
 		
 	pte_t *ptep = NULL;
 	page_lookup(curenv->env_pgdir, (void *)s, &ptep);
@@ -155,7 +152,16 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	
+	
+	struct Env *env = NULL;
+	if (envid2env(envid, &env, 1) < 0)
+		return -E_BAD_ENV;
+		
+	user_mem_assert(env, func, 4, PTE_U);
+	
+	env->env_pgfault_upcall = func;
+	return 0;
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -392,6 +398,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
 		case SYS_page_unmap:
 			ret = sys_page_unmap((envid_t)a1, (void *)a2);
+			break;
+		case SYS_env_set_pgfault_upcall:
+			ret = sys_env_set_pgfault_upcall((envid_t)a1, (void *)a2);
 			break;
 		default:
 			ret = -E_INVAL;

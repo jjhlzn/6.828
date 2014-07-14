@@ -641,8 +641,8 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	if (pte_store)
 		*pte_store = ptep;
 	if (ptep == NULL || !(*ptep) || !(*ptep & PTE_P))
-	return NULL;
-	extern size_t npages; 
+		return NULL;
+	//s=extern size_t npages; 
 	//cprintf("PTE_ADDR(*ptep) = %8.8x, npages = %d, pgnum = %d, b = %d\n",
 	//PTE_ADDR(*ptep), npages, PGNUM(PTE_ADDR(*ptep)), PGNUM(PTE_ADDR(*ptep)) >= npages);
 	return pa2page(PTE_ADDR(*ptep));
@@ -727,7 +727,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 		r = -E_FAULT;
 	} else {
 		uint32_t va_pgaligned = ROUNDDOWN(v_addr, PGSIZE);
-		len += (uint32_t)va - va_pgaligned;
+		len += v_addr - va_pgaligned;
 		uint32_t end_va = va_pgaligned + len;
 		for ( ; va_pgaligned < end_va; va_pgaligned += PGSIZE) {
 			pte_t *ptep = NULL;
@@ -739,7 +739,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 			}
 		} 
 	}
-	return 0;
+	return r;
 }
 
 //
