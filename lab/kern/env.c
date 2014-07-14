@@ -224,6 +224,9 @@ env_setup_vm(struct Env *e)
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
+	// user page_dir as page table, so page tables are pages. 
+	// so, in user space, [UVPT, UVPT + PGSIZE) is 0th page table (first page), 
+	// and, [UVPT + i * PGSIZE, UVPT + (i + 1) * PGSIZE) is the ith page table
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
 
 	return 0;

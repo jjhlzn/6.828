@@ -31,7 +31,7 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 		// LAB 4: Your code here.
 		int r;
 		envid_t envid = sys_getenvid();
-		if ((r = sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_U | PTE_W)) < 0)
+		if ((r = sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_U | PTE_P | PTE_W)) < 0)
 			panic("set_pgfault_handler: %e",r);
 		if ((r = sys_env_set_pgfault_upcall(envid, (void *)_pgfault_upcall)) < 0)
 			panic("set_pgfault_handler: %e",r);

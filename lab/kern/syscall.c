@@ -24,7 +24,7 @@ sys_cputs(const char *s, size_t len)
 	// LAB 3: Your code here.
 	//cprintf("s = %8.8x, len=%d\n",s,len);
 	user_mem_assert(curenv, (void *)s, len, PTE_U);
-		
+
 	pte_t *ptep = NULL;
 	page_lookup(curenv->env_pgdir, (void *)s, &ptep);
 	if (ptep == NULL) {
@@ -191,6 +191,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	//   allocated!
 
 	// LAB 4: Your code here.
+	//cprintf("sys_page_alloc: perm = %08x\n", perm);
 	struct Env *env = NULL;
 	if (envid2env(envid, &env, 1) < 0)
 		return -E_BAD_ENV;
@@ -199,7 +200,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	if (va_alias >= UTOP || va_alias % PGSIZE )
 		return -E_INVAL;
 	
-	if ((perm & ~PTE_SYSCALL) || !(perm & (PTE_U | PTE_P)))
+	if ((perm & ~PTE_SYSCALL) || !(perm & PTE_U) || !(perm & PTE_P))
 		return -E_INVAL;
 		
 	struct Page *pp = NULL;
@@ -251,20 +252,28 @@ sys_page_map(envid_t srcenvid, void *srcva,
 		return -E_BAD_ENV;
 	
 	if ((uint32_t)srcva >= UTOP || (uint32_t)srcva % PGSIZE
-		 || (uint32_t)dstva >= UTOP || (uint32_t)dstva % PGSIZE)
+		 || (uint32_t)dstva >= UTOP || (uint32_t)dstva % PGSIZE) {
+		cprintf("invalid paramters0\n");
 		return -E_INVAL;
+	}
 		
 	pte_t *ptep = NULL;
 	struct Page *srcpage = NULL;
 	srcpage = page_lookup(srcenv->env_pgdir, srcva, &ptep);
-	if (!ptep || !*ptep || !srcpage)
+	if (!ptep || !*ptep || !srcpage) {
+		cprintf("invalid paramters1\n");
 		return -E_INVAL;
+	}
 	
-	if ((perm & ~PTE_SYSCALL) || !(perm & (PTE_U | PTE_P)))
+	if ((perm & ~PTE_SYSCALL) || !(perm & PTE_U) || !(perm & PTE_P)) {
+		cprintf("invalid paramters2, perm = %08x\n", perm);
 		return -E_INVAL;
+	}
 		
-	if((perm & PTE_W) && !(*ptep & PTE_W))
+	if((perm & PTE_W) && !(*ptep & PTE_W)) {
+		cprintf("invalid paramters3\n");
 		return -E_INVAL;
+	}
 		
 	if(page_insert(dstenv->env_pgdir, srcpage, dstva, perm) < 0)
 		return -E_NO_MEM;
@@ -288,8 +297,9 @@ sys_page_unmap(envid_t envid, void *va)
 	struct Env *env = NULL;
 	if (envid2env(envid, &env, 1) < 0)
 		return -E_BAD_ENV;
-	if ((uintptr_t)va >= UTOP || (uintptr_t)va % PGSIZE)
+	if ((uintptr_t)va >= UTOP || (uintptr_t)va % PGSIZE) {
 		return -E_INVAL;
+	}
 	
 	page_remove(env->env_pgdir, va);
 	return 0;

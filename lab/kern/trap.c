@@ -377,6 +377,7 @@ page_fault_handler(struct Trapframe *tf)
 		memmove((void *)uxstacktop, &utf, utf_size);
 					
 		tf->tf_esp = uxstacktop; //return to user exception stack top
+		//cprintf("uxstacktop = %08x, oesp = %08x\n", uxstacktop, tf->tf_regs.reg_oesp);
 		tf->tf_eip = (uint32_t)curenv->env_pgfault_upcall; //return to user env page fault handler
 
 		env_run(curenv);
