@@ -38,7 +38,9 @@ sched_yield(void)
 		
 	//cprintf("find_sart_i = %d\n", find_start_i);
 	
-	for (i = find_start_i; i < NENV - 1; i++) {
+	int find_count;
+	for (find_count = 0, i = find_start_i; find_count < NENV - 1; i++, find_count++) {
+		i = i % NENV;
 		if (envs[i].env_status == ENV_RUNNABLE 
 		 && envs[i].env_type != ENV_TYPE_IDLE) {
 			next_env = envs + i;

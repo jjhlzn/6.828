@@ -73,27 +73,49 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-	SETGATE(idt[0], 1, GD_KT, (uint32_t)handler0, 0);
-	SETGATE(idt[1], 1, GD_KT, (uint32_t)handler1, 0);
-	SETGATE(idt[2], 1, GD_KT, (uint32_t)handler2, 0);
-	SETGATE(idt[3], 1, GD_KT, (uint32_t)handler3, 3);
-	SETGATE(idt[4], 1, GD_KT, (uint32_t)handler4, 0);
-	SETGATE(idt[5], 1, GD_KT, (uint32_t)handler5, 0);
-	SETGATE(idt[6], 1, GD_KT, (uint32_t)handler6, 0);
-	SETGATE(idt[7], 1, GD_KT, (uint32_t)handler7, 0);
-	SETGATE(idt[8], 1, GD_KT, (uint32_t)handler8, 0);
-	//SETGATE(idt[9], 1, GD_KT, (uint32_t)handler9, 0);  //Reserved
-	SETGATE(idt[10], 1, GD_KT, (uint32_t)handler10, 0);
-	SETGATE(idt[11], 1, GD_KT, (uint32_t)handler11, 0);
-	SETGATE(idt[12], 1, GD_KT, (uint32_t)handler12, 0);
-	SETGATE(idt[T_GPFLT], 1, GD_KT, (uint32_t)handler13, 0);
-	SETGATE(idt[T_PGFLT], 1, GD_KT, (uint32_t)handler14, 0);
-	//SETGATE(idt[15], 1, GD_KT, (uint32_t)handler15, 0); //Reserved
-	SETGATE(idt[16], 1, GD_KT, (uint32_t)handler16, 0);
-	SETGATE(idt[17], 1, GD_KT, (uint32_t)handler17, 0);
-	SETGATE(idt[18], 1, GD_KT, (uint32_t)handler18, 0);
-	SETGATE(idt[19], 1, GD_KT, (uint32_t)handler19, 0);
-	SETGATE(idt[T_SYSCALL], 1, GD_KT, (uint32_t)handler48, 3);
+	// treat exception as interrupt gate, so when exeption trapped to kernel,
+	// there is no any IRQ can enter into kernel.
+	SETGATE(idt[0], 0, GD_KT, (uintptr_t)handler0, 0);
+	SETGATE(idt[1], 0, GD_KT, (uintptr_t)handler1, 0);
+	SETGATE(idt[2], 0, GD_KT, (uintptr_t)handler2, 0);
+	SETGATE(idt[3], 0, GD_KT, (uintptr_t)handler3, 3);
+	SETGATE(idt[4], 0, GD_KT, (uintptr_t)handler4, 0);
+	SETGATE(idt[5], 0, GD_KT, (uintptr_t)handler5, 0);
+	SETGATE(idt[6], 0, GD_KT, (uintptr_t)handler6, 0);
+	SETGATE(idt[7], 0, GD_KT, (uintptr_t)handler7, 0);
+	SETGATE(idt[8], 0, GD_KT, (uintptr_t)handler8, 0);
+	//SETGATE(idt[9], 0, GD_KT, (uintptr_t)handler9, 0);  //Reserved
+	SETGATE(idt[10], 0, GD_KT, (uintptr_t)handler10, 0);
+	SETGATE(idt[11], 0, GD_KT, (uintptr_t)handler11, 0);
+	SETGATE(idt[12], 0, GD_KT, (uintptr_t)handler12, 0);
+	SETGATE(idt[T_GPFLT], 0, GD_KT, (uintptr_t)handler13, 0);
+	SETGATE(idt[T_PGFLT], 0, GD_KT, (uintptr_t)handler14, 0);
+	//SETGATE(idt[15], 0, GD_KT, (uintptr_t)handler15, 0); //Reserved
+	SETGATE(idt[16], 0, GD_KT, (uintptr_t)handler16, 0);
+	SETGATE(idt[17], 0, GD_KT, (uintptr_t)handler17, 0);
+	SETGATE(idt[18], 0, GD_KT, (uintptr_t)handler18, 0);
+	SETGATE(idt[19], 0, GD_KT, (uintptr_t)handler19, 0);
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, (uintptr_t)handler48, 3); //make a interrupt gate but no a trap gate
+															// which means when invoke system call, cpu will
+															// mask FL_IF.
+	
+	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER], 0, GD_KT, (uintptr_t)handler32, 0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_KBD], 0, GD_KT, (uintptr_t)handler33, 0);
+	SETGATE(idt[IRQ_OFFSET+2], 0, GD_KT, (uintptr_t)handler34, 0);
+	SETGATE(idt[IRQ_OFFSET+3], 0, GD_KT, (uintptr_t)handler35, 0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SERIAL], 0, GD_KT, (uintptr_t)handler36, 0);
+	SETGATE(idt[IRQ_OFFSET+5], 0, GD_KT, (uintptr_t)handler37, 0);
+	SETGATE(idt[IRQ_OFFSET+6], 0, GD_KT, (uintptr_t)handler38, 0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_SPURIOUS], 0, GD_KT, (uintptr_t)handler39, 0);
+	SETGATE(idt[IRQ_OFFSET+8], 0, GD_KT, (uintptr_t)handler40, 0);
+	SETGATE(idt[IRQ_OFFSET+9], 0, GD_KT, (uintptr_t)handler41, 0);
+	SETGATE(idt[IRQ_OFFSET+10], 0, GD_KT, (uintptr_t)handler42, 0);
+	SETGATE(idt[IRQ_OFFSET+11], 0, GD_KT, (uintptr_t)handler43, 0);
+	SETGATE(idt[IRQ_OFFSET+12], 0, GD_KT, (uintptr_t)handler44, 0);
+	SETGATE(idt[IRQ_OFFSET+13], 0, GD_KT, (uintptr_t)handler45, 0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_IDE], 0, GD_KT, (uintptr_t)handler46, 0);
+	SETGATE(idt[IRQ_OFFSET+15], 0, GD_KT, (uintptr_t)handler47, 0);
+	SETGATE(idt[IRQ_OFFSET+IRQ_ERROR], 0, GD_KT, (uintptr_t)handler51, 0);
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -211,6 +233,11 @@ trap_dispatch(struct Trapframe *tf)
 										  tf->tf_regs.reg_esi);
 			env_run(curenv);
 			break;
+		case IRQ_OFFSET + IRQ_TIMER:
+			//outb(0x0020, 0x60);
+			lapic_eoi();
+			sched_yield();
+			break;
 	}
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -250,6 +277,9 @@ trap(struct Trapframe *tf)
 	// Check that interrupts are disabled.  If this assertion
 	// fails, DO NOT be tempted to fix it by inserting a "cli" in
 	// the interrupt path.
+	//if (curenv)
+	//	cprintf("trap(): [%08x] env:\n",curenv->env_id);
+	//print_trapframe(tf);
 	assert(!(read_eflags() & FL_IF));
 
 	//cprintf("Incoming TRAP frame at %p\n", tf);
@@ -275,6 +305,9 @@ trap(struct Trapframe *tf)
 		curenv->env_tf = *tf;
 		// The trapframe on the stack should be ignored from here on.
 		tf = &curenv->env_tf;
+		//cprintf("happend on user!\n");
+	} else {
+		//cprintf("happend on kernel!\n");
 	}
 
 	// Record that tf is the last real trapframe so
@@ -307,6 +340,7 @@ page_fault_handler(struct Trapframe *tf)
 	// LAB 3: Your code here.
 	if ((tf->tf_cs & 3) == 0) {
 		print_trapframe(tf);
+		cprintf("fault_va = %08x\n", fault_va);
 		panic("page fault happened in kernel-mode!");
 	}
 		

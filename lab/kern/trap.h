@@ -43,4 +43,22 @@ void handler18(void);
 void handler19(void);
 void handler48(void);
 
+void handler32(void);
+void handler33(void);
+void handler34(void);
+void handler35(void);
+void handler36(void);
+void handler37(void);
+void handler38(void);
+void handler39(void);
+void handler40(void);
+void handler41(void);
+void handler42(void);
+void handler43(void);
+void handler44(void);
+void handler45(void);
+void handler46(void);
+void handler47(void);
+void handler51(void);
+
 #endif /* JOS_KERN_TRAP_H */
