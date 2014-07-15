@@ -36,7 +36,9 @@ pgfault(struct UTrapframe *utf)
 	
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
-	// page to the old page's address.
+	// page to the old page's address. (jjh's comments: why? because when
+	// invoke sys_page_map() which will invoke page_insert(), and in page_insert(), 
+	// If there is already a page mapped at 'va', it should be page_remove()d.
 	// Hint:
 	//   You should make three system calls.
 	//   No need to explicitly delete the old page's mapping.
@@ -44,14 +46,17 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	if ((r = sys_page_alloc(0, (void *)PFTEMP, PTE_P | PTE_U | PTE_W)) < 0) 
 		panic("pgfault: sys_page_alloc return error - %e", r);
+		
+	//copy the copy-on-write page to private page
 	memmove((void *)PFTEMP, ROUNDDOWN(addr, PGSIZE), PGSIZE);
 	
 	//TODO: delete the old page's mapping, whys it's not needed??
-	if ((r = sys_page_unmap(0, ROUNDDOWN(addr, PGSIZE))) < 0)
-		panic("pgfault: sys_page_unmap return error = %e", r);
+	//if ((r = sys_page_unmap(0, ROUNDDOWN(addr, PGSIZE))) < 0)
+	//	panic("pgfault: sys_page_unmap return error = %e", r);
 	
 	//map new page to old address
-	if ((r = sys_page_map(0, (void *)PFTEMP, 0, ROUNDDOWN(addr, PGSIZE), PTE_P | PTE_U | PTE_W)) < 0)
+	if ((r = sys_page_map(0, (void *)PFTEMP, 0, ROUNDDOWN(addr, PGSIZE), 
+				PTE_P | PTE_U | PTE_W)) < 0)
 		panic("pgfault: sys_page_map return error - %e", r);
 	
 	//unmap new page to PFTEMP
@@ -67,16 +72,14 @@ pgfault(struct UTrapframe *utf)
 // marked copy-on-write as well.  (Exercise: Why do we need to mark ours
 // copy-on-write again if it was already copy-on-write at the beginning of
 // this function?)
-// answer: it mean father has a more child, and the page is shared more. 
-// and it will influence handle page fault.
-//
+// answer: my guess. because of concurrency, now it's in user space. maybe other "thread"
+// of the env or kernel will change the mapping not copy-on-write. so do it again is safe.
 // Returns: 0 on success, < 0 on error.
 // It is also OK to panic on error.
 //
 static int
 duppage(envid_t envid, unsigned pn)
 {
-	
 	int r;
 
 	// LAB 4: Your code here.
