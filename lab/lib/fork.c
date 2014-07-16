@@ -136,7 +136,7 @@ fork(void)
 	
 	if (child_envid > 0) { //father
 		// copy page table mapping below UTOP if pte is present
-		cprintf("[%08x] setup child env\n", thisenv->env_id);
+		//cprintf("[%08x] setup child env\n", thisenv->env_id);
 		for (i = 0; i < UTOP / PGSIZE; i++) 
 			if ((vpd[i/1024] & PTE_P) && (vpt[i] & PTE_P))
 				duppage(child_envid, i);
@@ -152,7 +152,7 @@ fork(void)
 	} else {  //child
 		thisenv = &envs[ENVX(sys_getenvid())];
 		_pgfault_handler = (void (*)(struct UTrapframe *utf))_pgfault_upcall;
-		cprintf("[%08x] child start running\n", thisenv->env_id);
+		//cprintf("[%08x] child start running\n", thisenv->env_id);
 	}
 	
 	return child_envid;
