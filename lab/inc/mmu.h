@@ -20,19 +20,17 @@
 // |      Index     |      Index     |                     |
 // +----------------+----------------+---------------------+
 //  \--- PDX(la) --/ \--- PTX(la) --/ \---- PGOFF(la) ----/
-//  \----------- VPN(la) -----------/
+//  \---------- PGNUM(la) ----------/
 //
-// The PDX, PTX, PGOFF, and VPN macros decompose linear addresses as shown.
+// The PDX, PTX, PGOFF, and PGNUM macros decompose linear addresses as shown.
 // To construct a linear address la from PDX(la), PTX(la), and PGOFF(la),
 // use PGADDR(PDX(la), PTX(la), PGOFF(la)).
 
 // page number field of address
-#define PPN(pa)		(((uintptr_t) (pa)) >> PTXSHIFT)
-#define VPN(la)		PPN(la)		// used to index into vpt[]
+#define PGNUM(la)	(((uintptr_t) (la)) >> PTXSHIFT)
 
 // page directory index
 #define PDX(la)		((((uintptr_t) (la)) >> PDXSHIFT) & 0x3FF)
-#define VPD(la)		PDX(la)		// used to index into vpd[]
 
 // page table index
 #define PTX(la)		((((uintptr_t) (la)) >> PTXSHIFT) & 0x3FF)
@@ -71,8 +69,8 @@
 // hardware, so user processes are allowed to set them arbitrarily.
 #define PTE_AVAIL	0xE00	// Available for software use
 
-// Only flags in PTE_ALLOWED may be used in system calls.
-#define PTE_ALLOWED	(PTE_AVAIL | PTE_P | PTE_W | PTE_U)
+// Flags in PTE_SYSCALL may be used in system calls.  (Others may not.)
+#define PTE_SYSCALL	(PTE_AVAIL | PTE_P | PTE_W | PTE_U)
 
 // Address in page table or page directory entry
 #define PTE_ADDR(pte)	((physaddr_t) (pte) & ~0xFFF)
@@ -257,7 +255,7 @@ struct Taskstate {
 // Gate descriptors for interrupts and traps
 struct Gatedesc {
 	unsigned gd_off_15_0 : 16;   // low 16 bits of offset in segment
-	unsigned gd_ss : 16;         // segment selector
+	unsigned gd_sel : 16;        // segment selector
 	unsigned gd_args : 5;        // # args, 0 for interrupt/trap gates
 	unsigned gd_rsv1 : 3;        // reserved(should be zero I guess)
 	unsigned gd_type : 4;        // type(STS_{TG,IG32,TG32})
@@ -284,7 +282,7 @@ struct Gatedesc {
 #define SETGATE(gate, istrap, sel, off, dpl)			\
 {								\
 	(gate).gd_off_15_0 = (uint32_t) (off) & 0xffff;		\
-	(gate).gd_ss = (sel);					\
+	(gate).gd_sel = (sel);					\
 	(gate).gd_args = 0;					\
 	(gate).gd_rsv1 = 0;					\
 	(gate).gd_type = (istrap) ? STS_TG32 : STS_IG32;	\
@@ -295,10 +293,10 @@ struct Gatedesc {
 }
 
 // Set up a call gate descriptor.
-#define SETCALLGATE(gate, ss, off, dpl)           	        \
+#define SETCALLGATE(gate, sel, off, dpl)           	        \
 {								\
 	(gate).gd_off_15_0 = (uint32_t) (off) & 0xffff;		\
-	(gate).gd_ss = (ss);					\
+	(gate).gd_sel = (sel);					\
 	(gate).gd_args = 0;					\
 	(gate).gd_rsv1 = 0;					\
 	(gate).gd_type = STS_CG32;				\
