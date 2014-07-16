@@ -102,6 +102,7 @@ sys_exofork(void)
 			return -E_NO_MEM;
 		else if (r == -E_NO_FREE_ENV)
 			return -E_NO_FREE_ENV;
+		panic("unknow error code %d",r);
 	}
 	
 	env->env_status = ENV_NOT_RUNNABLE;

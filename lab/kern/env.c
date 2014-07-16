@@ -586,6 +586,6 @@ env_run(struct Env *e)
 	
 	//cprintf("going to run %08x\n",e->env_id);
 	env_pop_tf(&e->env_tf);
-	panic("env_run not yet implemented");
+	//panic("env_run not yet implemented");
 }
 

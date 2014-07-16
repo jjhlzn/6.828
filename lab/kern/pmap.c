@@ -987,10 +987,10 @@ check_va2pa(pde_t *pgdir, uintptr_t va)
 		//cprintf("phys_addr = %8.8x\n",phys_addr);
 		return phys_addr;
 	} else {
-	p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
-	if (!(p[PTX(va)] & PTE_P))
-		return ~0;
-	return PTE_ADDR(p[PTX(va)]);
+		p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
+		if (!(p[PTX(va)] & PTE_P))
+			return ~0;
+		return PTE_ADDR(p[PTX(va)]);
 	}
 }
 
