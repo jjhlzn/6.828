@@ -457,6 +457,7 @@ page_alloc(int alloc_flags)
 	// Fill this function in
 	if (page_free_list == 0) {
 		//cprintf("WARN: out of memory!\n");
+		return NULL;
 	}
 	
 	//cprintf("page_alloc: allloc pa %uK\n",page2pa(page_free_list)/1024);
@@ -524,7 +525,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		if (create) {
 			struct Page *new_page = page_alloc(ALLOC_ZERO); //used as page table page
 			if (!new_page) 
-	return NULL;
+				return NULL;
 			new_page->pp_ref++;
 			//if ((uint32_t)(pgdir+PDX(va)) > 0xf0400000)
 			//	panic("havn't mapped\n");
@@ -637,7 +638,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	if (pte_store)
 		*pte_store = ptep;
 	if (ptep == NULL || !(*ptep) || !(*ptep & PTE_P))
-	return NULL;
+		return NULL;
 	//s=extern size_t npages; 
 	//cprintf("PTE_ADDR(*ptep) = %8.8x, npages = %d, pgnum = %d, b = %d\n",
 	//PTE_ADDR(*ptep), npages, PGNUM(PTE_ADDR(*ptep)), PGNUM(PTE_ADDR(*ptep)) >= npages);
