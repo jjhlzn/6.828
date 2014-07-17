@@ -235,8 +235,8 @@ trap_dispatch(struct Trapframe *tf)
 			env_run(curenv);
 			break;
 		case IRQ_OFFSET + IRQ_TIMER:
-			//outb(0x0020, 0x60);
 			lapic_eoi();
+			time_tick();
 			sched_yield();
 			break;
 	}
