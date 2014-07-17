@@ -45,6 +45,22 @@ free_block(uint32_t blockno)
 	bitmap[blockno/32] |= 1<<(blockno%32);
 }
 
+// Get first 1 from data, e.g. if data = 0x4, the it return 2
+// NOTE: data can't be zero
+static int 
+get_first_one(uint32_t data)
+{
+	assert(data);
+	int i;
+	for (i = 0; i < 32; i++) {
+		if (data % 2)
+			return i;
+		data = data / 2;
+	}
+	panic("data can't be zero");
+	return 0;
+}
+
 // Search the bitmap for a free block and allocate it.  When you
 // allocate a block, immediately flush the changed bitmap block
 // to disk.
@@ -61,7 +77,18 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	uint32_t blockno, found_blockno;
+	for(blockno = 0; blockno < BLKBITSIZE && blockno < super->s_nblocks; blockno += 32) {
+		if (bitmap[blockno/32]) {
+			//the free blockno
+			blockno += get_first_one(bitmap[blockno/32]);
+			//mark the blockno in-use
+			bitmap[blockno/32] &= 0<<(blockno%32);
+			//flush bitmap block to disk
+			flush_block(bitmap);
+			return blockno;
+		}
+	}
 	return -E_NO_DISK;
 }
 
