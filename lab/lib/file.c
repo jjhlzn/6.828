@@ -63,13 +63,37 @@ open(const char *path, int mode)
 	//
 	// (fd_alloc does not allocate a page, it just returns an
 	// unused fd address.  Do you need to allocate a page?)
+	// answer: no. file system environment has alloc a fd page for
+	// us, and we let fs env map the fd page in our unused fd address.
 	//
 	// Return the file descriptor index.
 	// If any step after fd_alloc fails, use fd_close to free the
 	// file descriptor.
 
 	// LAB 5: Your code here.
-	panic("open not implemented");
+	struct Fd *fd = NULL;
+	int r;
+	
+	if (strlen(path) >= MAXPATHLEN)
+		return -E_BAD_PATH;
+		
+	if ((r = fd_alloc(&fd)) < 0)
+		return r;
+	
+	//panic("fd = %08x\n", fd);
+	
+	fsipcbuf.open.req_omode = mode;
+	memmove(fsipcbuf.open.req_path, path, strlen(path));
+	fsipcbuf.open.req_path[strlen(path)] = 0;
+	
+	if ((r = fsipc(FSREQ_OPEN, fd)) < 0) {
+		if (fd_close(fd, 0) < 0)
+			cprintf("open: fd_close fail!\n");
+		return r;
+	}
+	cprintf("%d, %d, %d\n", fd->fd_dev_id, fd->fd_offset, fd->fd_omode);
+
+	return fd2num(fd);
 }
 
 // Flush the file descriptor.  After this the fileid is invalid.
@@ -133,7 +157,6 @@ devfile_write(struct Fd *fd, const void *buf, size_t n)
 	
 	if ((r = fsipc(FSREQ_WRITE, &fsipcbuf)) < 0)
 		return r;
-	
 	return r;
 }
 

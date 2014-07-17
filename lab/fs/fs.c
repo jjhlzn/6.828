@@ -55,7 +55,7 @@ get_first_one(uint32_t data)
 	assert(data);
 	int i;
 	for (i = 0; i < 32; i++) {
-		if (data % 2)
+		if (data % 2) 
 			return i;
 		data = data / 2;
 	}
@@ -80,14 +80,16 @@ alloc_block(void)
 
 	// LAB 5: Your code here.
 	uint32_t blockno, found_blockno;
+	//cprintf("super->s_nblocks = %d\n",super->s_nblocks);
 	for(blockno = 0; blockno < super->s_nblocks; blockno += 32) {
 		if (bitmap[blockno/32]) {
 			//the free blockno
-			blockno += get_first_one(bitmap[blockno/32]);
+			blockno += get_first_one(bitmap[blockno / 32]);
 			//mark the blockno in-use
-			bitmap[blockno/32] &= 0<<(blockno%32);
+			bitmap[blockno/32] &= ~(1 << (blockno % 32)); 
 			//flush bitmap block to disk
 			flush_block(bitmap);
+			//cprintf("alloc_block: alloc %dth\n",blockno);
 			return blockno;
 		}
 	}
@@ -382,7 +384,11 @@ file_create(const char *path, struct File **pf)
 int
 file_open(const char *path, struct File **pf)
 {
-	return walk_path(path, 0, pf, 0);
+	int r = walk_path(path, 0, pf, 0);
+	if (r < 0)
+		if (debug)
+			cprintf("file_open: can't open %s\n", path);
+	return r;
 }
 
 // Read count bytes from f into buf, starting from seek position

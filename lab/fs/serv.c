@@ -243,13 +243,23 @@ serve_write(envid_t envid, struct Fsreq_write *req)
 	struct OpenFile *o;
 	int r;
 	
-	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0) {
+		if (debug)
+			cprintf("serve_write: openfile_lookup fail\n");
 		return r;
+	}
 	
-	if ((r = file_write(o->o_file, req->req_buf,
-									req->req_n, o->o_fd->fd_offset)) < 0)
+	if ((r = file_write(o->o_file, 
+						req->req_buf,
+						req->req_n, 
+						o->o_fd->fd_offset)) < 0) {
+		if (debug)
+			cprintf("serve_write: file_write fail\n");
 		return r;
+	}
 	o->o_fd->fd_offset += r;
+	if (debug)
+		cprintf("serve_write: fd_offset = %08x\n", o->o_fd->fd_offset);
 	return r;
 }
 
