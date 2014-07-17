@@ -387,12 +387,16 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 		
 	struct Page *pp = NULL;
 	pte_t *ptep = NULL;
-	if ((uintptr_t)srcva < UTOP && !(pp = page_lookup(curenv->env_pgdir, srcva, &ptep))) {
-		cprintf("sys_ipc_try_send: bad parameter, no mapping in srcva = %08x\n", srcva);
+	if ((uintptr_t)srcva < UTOP && !(pp = page_lookup(curenv->env_pgdir, 
+														srcva, &ptep))) {
+		cprintf("sys_ipc_try_send: bad parameter, no mapping in srcva = %08x\n", 
+				srcva);
 		return -E_INVAL;
 	}
 	
-	if ((perm & PTE_W) && !(*ptep & PTE_W)) {
+	if (    (uintptr_t)srcva < UTOP 
+	     && (perm & PTE_W) 
+	     && !(*ptep & PTE_W)) {
 		cprintf("sys_ipc_try_send: bad parameters, perm with PTE_W, but \
 				 pte with srcva can't PTE_W, perm = %08x, pte = %08x\n", perm, *ptep);
 		return -E_INVAL;

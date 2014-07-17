@@ -637,7 +637,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	pte_t *ptep = pgdir_walk(pgdir, va, 0);
 	if (pte_store)
 		*pte_store = ptep;
-	if (ptep == NULL || !(*ptep) || !(*ptep & PTE_P))
+	if (!ptep || !(*ptep) || !(*ptep & PTE_P))
 		return NULL;
 	//s=extern size_t npages; 
 	//cprintf("PTE_ADDR(*ptep) = %8.8x, npages = %d, pgnum = %d, b = %d\n",

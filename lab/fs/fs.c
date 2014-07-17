@@ -1,7 +1,7 @@
 #include <inc/string.h>
 
 #include "fs.h"
-#define debug 0
+#define debug  0
 
 static int get_first_one(uint32_t data);
 // --------------------------------------------------------------

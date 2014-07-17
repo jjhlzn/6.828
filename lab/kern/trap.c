@@ -339,7 +339,7 @@ page_fault_handler(struct Trapframe *tf)
 	// LAB 3: Your code here.
 	if ((tf->tf_cs & 3) == 0) {
 		print_trapframe(tf);
-		cprintf("fault_va = %08x\n", fault_va);
+		//cprintf("fault_va = %08x\n", fault_va);
 		panic("page fault happened in kernel-mode!");
 	}
 		
