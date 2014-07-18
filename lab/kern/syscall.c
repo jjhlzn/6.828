@@ -153,7 +153,24 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 	// LAB 5: Your code here.
 	// Remember to check whether the user has supplied us with a good
 	// address!
-	panic("sys_env_set_trapframe not implemented");
+	struct Env *env = NULL;
+	if (envid2env(envid, &env, 1) < 0)
+		return -E_BAD_ENV;
+		
+	user_mem_assert(env, tf, sizeof(struct Trapframe), PTE_U | PTE_P | PTE_W);
+	//check the contents of tf
+	if ((tf->tf_cs & 3) != 3) {
+		cprintf("sys_env_set_trapframe: tf->tf_cs & 3 != 3\n");
+		return -E_INVAL;
+	}
+	
+	if (!(tf->tf_eflags & FL_IF)) {
+		cprintf("sys_env_set_trapframe: tf->tf_eflags $ FL_IF != 1\n");
+		return -E_INVAL;
+	}
+	
+	env->env_tf = *tf;
+	return 0;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -498,6 +515,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
 		case SYS_ipc_try_send:
 			ret = sys_ipc_try_send((envid_t)a1, (uint32_t)a2, (void *)a3, (unsigned)a4);
+			break;
+		case SYS_env_set_trapframe:
+			ret = sys_env_set_trapframe((envid_t)a1, (struct Trapframe *)a2);
 			break;
 		default:
 			cprintf("syscall: syscall(%d) doesn't exist!", ret);
