@@ -30,7 +30,7 @@ struct pci_driver pci_attach_class[] = {
 
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device
 struct pci_driver pci_attach_vendor[] = {
-	{ PCI_VENDOR_E1000, PCI_PRODUCT_E1000, &e1000_attach},
+	{ E1000_PCI_VENDOR, E1000_PCI_PRODUCT, &e1000_attach},
 	{ 0, 0, 0 },
 };
 
@@ -207,7 +207,7 @@ pci_func_enable(struct pci_func *f)
 		pci_conf_write(f, bar, 0xffffffff);
 		uint32_t rv = pci_conf_read(f, bar);
 
-		if (rv == 0)
+		if (rv == 0) 
 			continue;
 
 		int regnum = PCI_MAPREG_NUM(bar);
@@ -240,6 +240,8 @@ pci_func_enable(struct pci_func *f)
 				f->bus->busno, f->dev, f->func,
 				PCI_VENDOR(f->dev_id), PCI_PRODUCT(f->dev_id),
 				regnum, base, size);
+		else 
+			cprintf("reg_base[%d]:base %08x, size %08x\n", regnum, base, size);
 	}
 
 	cprintf("PCI function %02x:%02x.%d (%04x:%04x) enabled\n",
