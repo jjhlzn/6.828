@@ -108,7 +108,7 @@ e1000_attach(struct pci_func *pcif)
 		tx_descs[i].buffer_addr = PADDR(tx_packet_buffer 
 											+ i * TX_DESC_PACKET_SIZE);
 		tx_descs[i].lower.data |= E1000_TXD_CMD_RS;
-		tx_descs[i].upper.data |= E1000_TXD_STAT_DD;
+		//tx_descs[i].upper.data |= E1000_TXD_STAT_DD;
 		//cprintf("buffer_addr = %08x\n",tx_descs[i].buffer_addr);
 	}
 	
@@ -149,20 +149,26 @@ e1000_tx(uint8_t *buf, int len)
 	//dh = pcibar0r(E1000_TDH / 4);
 	tdt = pcibar0r(TDT);
 	
+	/*
 	while (!((tx_descs[tdt].lower.data & E1000_TXD_CMD_RS) 
 	   && (tx_descs[tdt].upper.data & E1000_TXD_STAT_DD)))
-	    cprintf("waiting, no free tx descriptor\n");
+	    cprintf("waiting, no free tx descriptor\n");*/
 	
 	memmove(KADDR((uint32_t)(tx_descs[tdt].buffer_addr)), buf, len);
 	tx_descs[tdt].lower.flags.length = len;
+	tx_descs[tdt].lower.data |= E1000_TXD_CMD_RS;   //set 1
+	tx_descs[tdt].lower.data |= E1000_TXD_CMD_EOP;  // set 1
+	tx_descs[tdt].lower.data &= ~E1000_TXD_CMD_DEXT; //set 0
 	tx_descs[tdt].upper.data &= ~E1000_TXD_STAT_DD; //clear E1000_TXD_STAT_DD
+	tx_descs[tdt].upper.fields.css = 0;
+
 	
-	//cprintf("buffer_addr = %08x\n", tx_descs[tdt].buffer_addr);
-	//cprintf("len = %d\n", tx_descs[tdt].lower.flags.length);
-	
-	next = (tdt + 1) % TX_DESC_LEN;
-	pcibar0w(TDT, next);
-	cprintf("e1000_tx: tdh = %d, tdt = %d\n", pcibar0r(TDH), pcibar0r(TDT));
+	cprintf("buffer_addr = %08x %08x\n", *(uint32_t *)((char *)&tx_descs[tdt].buffer_addr + 4),
+					*(uint32_t *)&tx_descs[tdt].buffer_addr);
+	cprintf("lower = %08x\n", tx_descs[tdt].lower.data);
+	cprintf("uppper = %08x\n", tx_descs[tdt].upper.data);
+	pcibar0w(TDT, (tdt + 1) % TX_DESC_LEN);
+	//cprintf("e1000_tx: tdh = %d, tdt = %d\n", pcibar0r(TDH), pcibar0r(TDT));
 	//cprintf("e1000_tx: finish\n");
 	return 0;
 }
