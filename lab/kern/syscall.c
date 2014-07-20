@@ -410,6 +410,8 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 		return -E_INVAL;
 	}
 	
+	
+	
 	if (    (uintptr_t)srcva < UTOP 
 	     && (perm & PTE_W) 
 	     && !(*ptep & PTE_W)) {
@@ -495,7 +497,10 @@ sys_net_recv(void *buf, int bufsize, int *packet_size)
 	user_mem_assert(curenv, buf, bufsize, PTE_P | PTE_U | PTE_W);
 	user_mem_assert(curenv, packet_size, sizeof(int), PTE_P | PTE_U | PTE_W);
 	
-	return e1000_rx((uint8_t *)buf, bufsize, packet_size);
+	int r = e1000_rx((uint8_t *)buf, bufsize, packet_size);
+	if (r == 0)
+		cprintf("sys_net_recv: packet_size = %d\n", *packet_size);
+	return r;
 }
 
 // Return the current time.
