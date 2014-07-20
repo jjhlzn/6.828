@@ -16,6 +16,7 @@
 #include <kern/spinlock.h>
 #include <kern/time.h>
 #include <kern/pci.h>
+#include <kern/e1000.h>
 
 static void boot_aps(void);
 
@@ -53,6 +54,12 @@ i386_init(void)
 	// Lab 6 hardware initialization functions
 	time_init();
 	pci_init();
+	
+	//test, send packet
+	char *msg = "hello";
+	int j;
+	for(j=0; j<65; j++)
+		e1000_tx((uint8_t *)msg, strlen(msg) > 512 ? strlen(msg) : 60+j);
 
 	// Acquire the big kernel lock before waking up APs
 	// Your code here:
@@ -70,7 +77,7 @@ i386_init(void)
 
 #if !defined(TEST_NO_NS)
 	// Start ns.
-	ENV_CREATE(net_ns, ENV_TYPE_NS);
+	//ENV_CREATE(net_ns, ENV_TYPE_NS);
 #endif
 
 #if defined(TEST)
