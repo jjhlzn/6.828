@@ -77,7 +77,8 @@ i386_init(void)
 
 #if !defined(TEST_NO_NS)
 	// Start ns.
-	//ENV_CREATE(net_ns, ENV_TYPE_NS);
+	cprintf("create ENT_TYPE_NS!!!!!\n");
+	ENV_CREATE(net_ns, ENV_TYPE_NS);
 #endif
 
 #if defined(TEST)

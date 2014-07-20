@@ -150,7 +150,7 @@ fork(void)
 	} else {  //child
 		thisenv = &envs[ENVX(sys_getenvid())];
 		_pgfault_handler = (void (*)(struct UTrapframe *utf))_pgfault_upcall;
-		//cprintf("[%08x] child start running\n", thisenv->env_id);
+		cprintf("[%08x] child start running\n", thisenv->env_id);
 	}
 	
 	return child_envid;

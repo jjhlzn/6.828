@@ -290,7 +290,7 @@ trap(struct Trapframe *tf)
 	assert(!(read_eflags() & FL_IF));
 
 	//cprintf("Incoming TRAP frame at %p\n", tf);
-
+	
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
 		// Acquire the big kernel lock before doing any
@@ -351,6 +351,8 @@ page_fault_handler(struct Trapframe *tf)
 		panic("page fault happened in kernel-mode!");
 	}
 	
+	if (curenv->env_id == 0x0000100a)
+		print_trapframe(tf);
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 

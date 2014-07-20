@@ -12,6 +12,8 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 #include <kern/time.h>
+#include <kern/pci.h>
+#include <kern/e1000.h>
 
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
@@ -464,6 +466,24 @@ sys_ipc_recv(void *dstva)
 	return 0;
 }
 
+// Invoke NIC driver to send packets. If NIC tx descriptor ring is full,
+// the function will spin for a free descriptor. 
+//
+// Return 0 on success
+// Return < 0 on error. Erros are:
+//  panic if user don't have permission to read buf
+//  -E_INVAL if len > 1518 (max ethenet packet size)
+static int 
+sys_net_send(void *buf, int len)
+{
+	user_mem_assert(curenv, buf, len, PTE_P | PTE_U);
+	
+	if (len > 1518)
+		return -E_INVAL;
+	
+	return e1000_tx((uint8_t *)buf, len);
+}
+
 // Return the current time.
 static int
 sys_time_msec(void)
@@ -526,6 +546,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
 		case SYS_time_msec:
 			ret = sys_time_msec();
+			break;
+		case SYS_net_send:
+			ret = sys_net_send((void *)a1, (int)a2);
 			break;
 		default:
 			cprintf("syscall: syscall(%d) doesn't exist!", ret);

@@ -335,21 +335,24 @@ umain(int argc, char **argv)
 		input(ns_envid);
 		return;
 	}
-
+	cprintf("fork input\ns");
 	// fork off the output thread that will send the packets to the NIC
 	// driver
 	output_envid = fork();
 	if (output_envid < 0)
 		panic("error forking");
 	else if (output_envid == 0) {
+		cprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		output(ns_envid);
 		return;
 	}
-
+	cprintf("fork ouputs\n");
 	// lwIP requires a user threading library; start the library and jump
 	// into a thread to continue initialization.
 	thread_init();
+	cprintf("after thread_init\n");
 	thread_create(0, "main", tmain, 0);
+	cprintf("after thread_create\n");
 	thread_yield();
 	// never coming here!
 }

@@ -4,6 +4,9 @@
 #define TESTOUTPUT_COUNT 10
 #endif
 
+union Nsipc nsipcbuf __attribute__((aligned(PGSIZE)));
+
+
 static envid_t output_envid;
 
 static struct jif_pkt *pkt = (struct jif_pkt*)REQVA;
@@ -31,7 +34,8 @@ umain(int argc, char **argv)
 		pkt->jp_len = snprintf(pkt->jp_data,
 				       PGSIZE - sizeof(pkt->jp_len),
 				       "Packet %02d", i);
-		cprintf("Transmitting packet %d\n", i);
+		cprintf("[%08x]: Transmitting packet %d\n", thisenv->env_id,i);
+		cprintf("output_envid: %08x\n", output_envid);
 		ipc_send(output_envid, NSREQ_OUTPUT, pkt, PTE_P|PTE_W|PTE_U);
 		sys_page_unmap(0, pkt);
 	}

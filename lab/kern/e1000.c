@@ -149,7 +149,6 @@ e1000_tx(uint8_t *buf, int len)
 	//dh = pcibar0r(E1000_TDH / 4);
 	tdt = pcibar0r(TDT);
 	
-	
 	while (!((tx_descs[tdt].lower.data & E1000_TXD_CMD_RS) 
 	   && (tx_descs[tdt].upper.data & E1000_TXD_STAT_DD)))
 	    cprintf("waiting, no free tx descriptor\n");
