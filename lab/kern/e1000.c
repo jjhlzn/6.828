@@ -108,7 +108,7 @@ e1000_attach(struct pci_func *pcif)
 		tx_descs[i].buffer_addr = PADDR(tx_packet_buffer 
 											+ i * TX_DESC_PACKET_SIZE);
 		tx_descs[i].lower.data |= E1000_TXD_CMD_RS;
-		//tx_descs[i].upper.data |= E1000_TXD_STAT_DD;
+		tx_descs[i].upper.data |= E1000_TXD_STAT_DD;
 		//cprintf("buffer_addr = %08x\n",tx_descs[i].buffer_addr);
 	}
 	
@@ -149,10 +149,10 @@ e1000_tx(uint8_t *buf, int len)
 	//dh = pcibar0r(E1000_TDH / 4);
 	tdt = pcibar0r(TDT);
 	
-	/*
+	
 	while (!((tx_descs[tdt].lower.data & E1000_TXD_CMD_RS) 
 	   && (tx_descs[tdt].upper.data & E1000_TXD_STAT_DD)))
-	    cprintf("waiting, no free tx descriptor\n");*/
+	    cprintf("waiting, no free tx descriptor\n");
 	
 	memmove(KADDR((uint32_t)(tx_descs[tdt].buffer_addr)), buf, len);
 	tx_descs[tdt].lower.flags.length = len;
