@@ -126,5 +126,5 @@ sys_time_msec(void)
 int 
 sys_net_send(void *buf, int len)
 {
-	return syscall(SYS_net_send, (uint32_t)buf, len, 0, 0, 0, 0);
+	return syscall(SYS_net_send, 1, (uint32_t)buf, len, 0, 0, 0);
 }

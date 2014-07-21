@@ -7,7 +7,7 @@
 #include <kern/e1000_hw.h>
 #include <kern/e1000.h>
 
-#define debug 1
+#define debug 0
 
 #define TDBAH (E1000_TDBAH / 4)
 #define TDBAL (E1000_TDBAL / 4)
@@ -161,14 +161,13 @@ e1000_tx(uint8_t *buf, int len)
 	tx_descs[tdt].upper.data &= ~E1000_TXD_STAT_DD; //clear E1000_TXD_STAT_DD
 	tx_descs[tdt].upper.fields.css = 0;
 
-	
-	cprintf("buffer_addr = %08x %08x\n", *(uint32_t *)((char *)&tx_descs[tdt].buffer_addr + 4),
-					*(uint32_t *)&tx_descs[tdt].buffer_addr);
-	cprintf("lower = %08x\n", tx_descs[tdt].lower.data);
-	cprintf("uppper = %08x\n", tx_descs[tdt].upper.data);
+	if (debug) {
+		cprintf("buffer_addr = %08x %08x\n", *(uint32_t *)((char *)&tx_descs[tdt].buffer_addr + 4),
+						*(uint32_t *)&tx_descs[tdt].buffer_addr);
+		cprintf("lower = %08x\n", tx_descs[tdt].lower.data);
+		cprintf("uppper = %08x\n", tx_descs[tdt].upper.data);
+	}
 	pcibar0w(TDT, (tdt + 1) % TX_DESC_LEN);
-	//cprintf("e1000_tx: tdh = %d, tdt = %d\n", pcibar0r(TDH), pcibar0r(TDT));
-	//cprintf("e1000_tx: finish\n");
 	return 0;
 }
 

@@ -35,7 +35,6 @@ umain(int argc, char **argv)
 				       PGSIZE - sizeof(pkt->jp_len),
 				       "Packet %02d", i);
 		cprintf("[%08x]: Transmitting packet %d\n", thisenv->env_id,i);
-		cprintf("output_envid: %08x\n", output_envid);
 		ipc_send(output_envid, NSREQ_OUTPUT, pkt, PTE_P|PTE_W|PTE_U);
 		sys_page_unmap(0, pkt);
 	}

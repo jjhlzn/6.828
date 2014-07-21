@@ -351,8 +351,6 @@ page_fault_handler(struct Trapframe *tf)
 		panic("page fault happened in kernel-mode!");
 	}
 	
-	if (curenv->env_id == 0x0000100a)
-		print_trapframe(tf);
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
@@ -398,6 +396,7 @@ page_fault_handler(struct Trapframe *tf)
 		
 		uint32_t uxstacktop = UXSTACKTOP;
 		if (tf->tf_esp > UXSTACKTOP-PGSIZE && tf->tf_esp <= UXSTACKTOP - 1) {
+			cprintf("enter recursive exception !!!!!!!!!!!!");
 			//check if stack will overflow
 			if (tf->tf_esp - 4 - sizeof(struct UTrapframe) < UXSTACKTOP - PGSIZE) {
 				cprintf("[%08x] exception stack overflow\n", curenv->env_id);
