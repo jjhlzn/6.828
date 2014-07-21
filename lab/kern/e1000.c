@@ -43,6 +43,73 @@ pcibar0w(int index, int value)
 	//cprintf("value = %08x, value1 = %08x\n", value, pci_bar0[index]);
 }
 
+static void 
+e1000_tx_init()
+{
+	// Tansimit packet initialization
+	// alloc memmory transmit descriptors array and the packet buffer pointed
+	// by the descriptor. Initialize every transimit descriptor. Set corresponding
+	// registers.
+	// 0. NIC use PHYSICAL address!
+	// 1. transmit descriptors array should be 16-bytes aligned.
+	// 2. initialize Transmit descriptors base address(TDBAH/TDBAL).
+	// 3. set transmit descriptors(TDLEN) register to the size of transmit
+	//	  descriptors array in bytes. this register must be 128-byte aligned.
+	//    because a transmit descriptor is 16-byte, so TDLEN must be mutiples 
+	//    of 8.
+	// 4. Set Transmit Descriptor Head And Tail (TDH/TDT) registers to 0.
+	// 5. Initialzie the Transmit Control Register (TCTL)
+	//    5.1 Set the Enable (TCTL.EN) bit to 0 for normal operation
+	//    5.2 Set the Pad Short Packets (TCTL.PSP) bit to 1
+	//    5.3 Configure the Collision Threshold (TCTL.CT) to the desired 
+	//        value. Ethernet standard is 10h.This setting only has meaning
+	//        in half duplex mode.
+	//    5.4 Configure the Collision Distance (TCTL.COLD) to its expected 
+	//        value. For full duplex operation, this value should be set 
+	//        to 40h. For gigabit half duplex, this value should be set to
+    //         200h. For 10/100 half duplex, this value should be set to 40h.
+    // 6. Set Transmit Inter Packet Gap (TIPG) register according to table
+    //    13-77 of section 13-4-34
+	uint32_t i;
+	pcibar0w(TDT, 0);
+	pcibar0w(TDH, 0);
+	pcibar0w(TDBAH, 0);
+	//cprintf("tx_descs = %08x, buffer_addr = %08x\n", tx_descs, tx_packet_buffer);
+	pcibar0w(TDBAL, PADDR(&tx_descs[0]));
+	pcibar0w(TDLEN, TX_DESC_LEN * sizeof(struct e1000_tx_desc));
+	memset(tx_descs, 0, sizeof(struct e1000_tx_desc) * TX_DESC_LEN);
+	for (i = 0; i < TX_DESC_LEN; i++) {
+		tx_descs[i].buffer_addr = PADDR(tx_packet_buffer 
+											+ i * TX_DESC_PACKET_SIZE);
+		tx_descs[i].lower.data |= E1000_TXD_CMD_RS;
+		tx_descs[i].upper.data |= E1000_TXD_STAT_DD;
+		//cprintf("buffer_addr = %08x\n",tx_descs[i].buffer_addr);
+	}
+
+	uint32_t tipg = pcibar0r(TIPG); // (8 << 20) | (12 << 10) | 10; //unit is ns
+	tipg &= ~0x000003FF;
+	tipg |= 0x8;
+	pcibar0w(TIPG, tipg); 
+
+	uint32_t tctl = 0;
+	tctl |= E1000_TCTL_EN;
+	tctl |= E1000_TCTL_PSP;
+	tctl |= 0x00000100; //set TCTL.CT = 10h
+	tctl |= 0x00040000; //set TCTL.COLD = 40h
+	//cprintf("tctl = %08x\n", tctl);
+	pcibar0w(TCTL, tctl);
+	
+	if (debug) {
+		cprintf("tx_desc_base_addr = %08x %08x\n", pcibar0r(TDBAH), pcibar0r(TDBAL));
+		cprintf("tx_desc_len = %08x (%d)\n", pcibar0r(TDLEN), 
+				pcibar0r(TDLEN)/sizeof(struct e1000_tx_desc));
+		cprintf("tdh = %d, tdt = %d\n", pcibar0r(TDH), pcibar0r(TDT));
+		cprintf("tctl = %08x\n", pcibar0r(TCTL));
+		cprintf("tipg = %08x\n", pcibar0r(TIPG));
+	}
+	
+}
+
 int  
 e1000_attach(struct pci_func *pcif) 
 {
@@ -73,70 +140,9 @@ e1000_attach(struct pci_func *pcif)
 	uint32_t device_status = pcibar0r(E1000_STATUS/4);
 	cprintf("device_status = %08x\n", device_status);
 	
-	// alloc memmory transmit descriptors array and the packet buffer pointed
-	// by the descriptor. Initialize every transimit descriptor. Set corresponding
-	// registers.
-	// 0. NIC use PHYSICAL address!
-	// 1. transmit descriptors array should be 16-bytes aligned.
-	// 2. initialize Transmit descriptors base address(TDBAH/TDBAL).
-	// 3. set transmit descriptors(TDLEN) register to the size of transmit
-	//	  descriptors array in bytes. this register must be 128-byte aligned.
-	//    because a transmit descriptor is 16-byte, so TDLEN must be mutiples 
-	//    of 8.
-	// 4. Set Transmit Descriptor Head And Tail (TDH/TDT) registers to 0.
-	// 5. Initialzie the Transmit Control Register (TCTL)
-	//    5.1 Set the Enable (TCTL.EN) bit to 0 for normal operation
-	//    5.2 Set the Pad Short Packets (TCTL.PSP) bit to 1
-	//    5.3 Configure the Collision Threshold (TCTL.CT) to the desired 
-	//        value. Ethernet standard is 10h.This setting only has meaning
-	//        in half duplex mode.
-	//    5.4 Configure the Collision Distance (TCTL.COLD) to its expected 
-	//        value. For full duplex operation, this value should be set 
-	//        to 40h. For gigabit half duplex, this value should be set to
-    //         200h. For 10/100 half duplex, this value should be set to 40h.
-    // 6. Set Transmit Inter Packet Gap (TIPG) register according to table
-    //    13-77 of section 13-4-34
-	uint32_t i;
-	pcibar0w(TDT, 0);
-	pcibar0w(TDH, 0);
-	pcibar0w(TDBAH, 0);
-	cprintf("tx_descs = %08x, buffer_addr = %08x\n", tx_descs, tx_packet_buffer);
-	pcibar0w(TDBAL, PADDR(&tx_descs[0]));
-	pcibar0w(TDLEN, TX_DESC_LEN * sizeof(struct e1000_tx_desc));
-	memset(tx_descs, 0, sizeof(struct e1000_tx_desc) * TX_DESC_LEN);
-	for (i = 0; i < TX_DESC_LEN; i++) {
-		tx_descs[i].buffer_addr = PADDR(tx_packet_buffer 
-											+ i * TX_DESC_PACKET_SIZE);
-		tx_descs[i].lower.data |= E1000_TXD_CMD_RS;
-		tx_descs[i].upper.data |= E1000_TXD_STAT_DD;
-		//cprintf("buffer_addr = %08x\n",tx_descs[i].buffer_addr);
-	}
-	
-	uint32_t reg_data = pcibar0r(E1000_CTRL_EXT/4);
-	reg_data &= ~0x000FFC00;
-	reg_data |= 0x00010000;
-	pcibar0w(E1000_CTRL_EXT/4, reg_data);
-	cprintf("ctrl_ex = %08x\n", pcibar0r(E1000_CTRL_EXT/4));
+	e1000_tx_init();
 
-	uint32_t tipg = pcibar0r(TIPG); // (8 << 20) | (12 << 10) | 10; //unit is ns
-	tipg &= ~0x000003FF;
-	tipg |= 0x8;
-	pcibar0w(TIPG, tipg); 
-
-	uint32_t tctl = 0;
-	tctl |= E1000_TCTL_EN;
-	tctl |= E1000_TCTL_PSP;
-	tctl |= 0x00000100; //set TCTL.CT = 10h
-	tctl |= 0x00040000; //set TCTL.COLD = 40h
-	cprintf("tctl = %08x\n", tctl);
-	pcibar0w(TCTL, tctl);
 	
-	cprintf("tx_desc_base_addr = %08x %08x\n", pcibar0r(TDBAH), pcibar0r(TDBAL));
-	cprintf("tx_desc_len = %08x (%d)\n", pcibar0r(TDLEN), 
-			pcibar0r(TDLEN)/sizeof(struct e1000_tx_desc));
-	cprintf("tdh = %d, tdt = %d\n", pcibar0r(TDH), pcibar0r(TDT));
-	cprintf("tctl = %08x\n", pcibar0r(TCTL));
-	cprintf("tipg = %08x\n", pcibar0r(TIPG));
 	return 0;
 }
 
@@ -170,5 +176,7 @@ e1000_tx(uint8_t *buf, int len)
 	pcibar0w(TDT, (tdt + 1) % TX_DESC_LEN);
 	return 0;
 }
+
+
 
 
