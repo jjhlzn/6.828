@@ -149,7 +149,6 @@ fork(void)
 			panic("fork: sys_env_set_status return error - %e", r);
 	} else {  //child
 		thisenv = &envs[ENVX(sys_getenvid())];
-		_pgfault_handler = (void (*)(struct UTrapframe *utf))_pgfault_upcall;
 		cprintf("[%08x] child start running\n", thisenv->env_id);
 	}
 	
