@@ -80,7 +80,8 @@ KERN_BINFILES +=	user/idle \
 			user/fairness \
 			user/pingpong \
 			user/pingpongs \
-			user/primes
+			user/primes 
+			
 # Binary files for LAB5
 KERN_BINFILES +=	user/testfile \
 			user/writemotd \
@@ -94,6 +95,7 @@ KERN_BINFILES +=	user/testtime \
 			user/echotest \
 			net/testoutput \
 			net/testinput \
+			net/testnetwork \
 			net/ns
 
 KERN_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))
