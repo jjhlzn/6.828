@@ -16,7 +16,6 @@
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
-static void get_pte_permission_desc(uint16_t pte_permission, char *msg);
 static void show_pte_mappings(int pdx, uintptr_t from_addr, uintptr_t end_addr);
 static int parse_str2int(char *str);
 static int atoi(char *str, int base);
@@ -462,7 +461,7 @@ dump_db (uintptr_t addr, uint32_t dw)
 	}
 }
 
-static void
+void
 get_pte_permission_desc(uint16_t pte_permission, char *msg)
 {
 	snprintf(msg,

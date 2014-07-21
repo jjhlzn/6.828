@@ -6,5 +6,6 @@
 
 int e1000_attach(struct pci_func *pcif);
 int e1000_tx(uint8_t *buf, int len);
+int e1000_rx(uint8_t *buf, int bufsize, int *packet_size);
 
 #endif	// JOS_KERN_E1000_H

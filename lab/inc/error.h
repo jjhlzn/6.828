@@ -25,6 +25,9 @@ enum {
 	E_FILE_EXISTS	= 13,	// File already exists
 	E_NOT_EXEC	= 14,	// File not a valid executable
 	E_NOT_SUPP	= 15,	// Operation not supported
+	
+	// Net error code only seen in user-level
+	E_NO_DATA = 16,
 
 	MAXERROR
 };

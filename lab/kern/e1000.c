@@ -1,6 +1,8 @@
 #include <inc/x86.h>
 #include <inc/assert.h>
 #include <inc/string.h>
+#include <inc/error.h>
+
 #include <inc/memlayout.h>
 #include <kern/pmap.h>
 #include <kern/pci.h>
@@ -17,17 +19,40 @@
 #define TDH   (E1000_TDH / 4)
 #define TIPG  (E1000_TIPG / 4)
 
+#define RDBAH (E1000_RDBAH / 4)
+#define RDBAL (E1000_RDBAL / 4)
+#define RDLEN (E1000_RDLEN / 4)
+#define RCTL  (E1000_RCTL / 4)
+#define RDT   (E1000_RDT / 4)
+#define RDH   (E1000_RDH / 4)
+#define IMS   (E1000_IMS / 4)
+#define RA    (E1000_RA / 4)
+#define RAL    (E1000_RA / 4)
+#define RAH    (E1000_RA / 4 + 1)
+#define MTA   (E1000_MTA / 4)
+
 
 volatile uint32_t *pci_bar0 = NULL;  //the mermoy address pointed by pci bar0
 
 #define TX_DESC_LEN 64  //must mutiples of 8
-static struct e1000_tx_desc tx_descs[TX_DESC_LEN]
-__attribute__ ((aligned(16)));  //transmit descriptor ring 
 #define TX_DESC_PACKET_SIZE 2048   //memory size pointed by each transmit 
 								   //descriptor
+#define RECV_DESC_LEN 64 //must mutiples of 8
+#define RECV_DESC_PACKET_SIZE 2048
+
+								   
+static struct e1000_tx_desc tx_descs[TX_DESC_LEN]
+__attribute__ ((aligned(16)));  //transmit descriptor ring 
+
 static uint8_t tx_packet_buffer[TX_DESC_LEN * TX_DESC_PACKET_SIZE]
 __attribute__ ((aligned(2048)));
-												
+
+
+static struct e1000_rx_desc rx_descs[RECV_DESC_LEN]
+__attribute__ ((aligned(16))); 
+static uint8_t recv_packet_buffer[RECV_DESC_LEN * RECV_DESC_PACKET_SIZE]
+__attribute__ ((aligned(2048)));
+
 
 static uint32_t
 pcibar0r(int index)
@@ -43,40 +68,41 @@ pcibar0w(int index, int value)
 	//cprintf("value = %08x, value1 = %08x\n", value, pci_bar0[index]);
 }
 
+
+// Tansimit packet initialization
+// alloc memmory transmit descriptors array and the packet buffer pointed
+// by the descriptor. Initialize every transimit descriptor. Set corresponding
+// registers.
+// 0. NIC use PHYSICAL address!
+// 1. transmit descriptors array should be 16-bytes aligned.
+// 2. initialize Transmit descriptors base address(TDBAH/TDBAL).
+// 3. set transmit descriptors(TDLEN) register to the size of transmit
+//	  descriptors array in bytes. this register must be 128-byte aligned.
+//    because a transmit descriptor is 16-byte, so TDLEN must be mutiples 
+//    of 8.
+// 4. Set Transmit Descriptor Head And Tail (TDH/TDT) registers to 0.
+// 5. Initialzie the Transmit Control Register (TCTL)
+//    5.1 Set the Enable (TCTL.EN) bit to 0 for normal operation
+//    5.2 Set the Pad Short Packets (TCTL.PSP) bit to 1
+//    5.3 Configure the Collision Threshold (TCTL.CT) to the desired 
+//        value. Ethernet standard is 10h.This setting only has meaning
+//        in half duplex mode.
+//    5.4 Configure the Collision Distance (TCTL.COLD) to its expected 
+//        value. For full duplex operation, this value should be set 
+//        to 40h. For gigabit half duplex, this value should be set to
+//         200h. For 10/100 half duplex, this value should be set to 40h.
+// 6. Set Transmit Inter Packet Gap (TIPG) register according to table
+//    13-77 of section 13-4-34
 static void 
 e1000_tx_init()
 {
-	// Tansimit packet initialization
-	// alloc memmory transmit descriptors array and the packet buffer pointed
-	// by the descriptor. Initialize every transimit descriptor. Set corresponding
-	// registers.
-	// 0. NIC use PHYSICAL address!
-	// 1. transmit descriptors array should be 16-bytes aligned.
-	// 2. initialize Transmit descriptors base address(TDBAH/TDBAL).
-	// 3. set transmit descriptors(TDLEN) register to the size of transmit
-	//	  descriptors array in bytes. this register must be 128-byte aligned.
-	//    because a transmit descriptor is 16-byte, so TDLEN must be mutiples 
-	//    of 8.
-	// 4. Set Transmit Descriptor Head And Tail (TDH/TDT) registers to 0.
-	// 5. Initialzie the Transmit Control Register (TCTL)
-	//    5.1 Set the Enable (TCTL.EN) bit to 0 for normal operation
-	//    5.2 Set the Pad Short Packets (TCTL.PSP) bit to 1
-	//    5.3 Configure the Collision Threshold (TCTL.CT) to the desired 
-	//        value. Ethernet standard is 10h.This setting only has meaning
-	//        in half duplex mode.
-	//    5.4 Configure the Collision Distance (TCTL.COLD) to its expected 
-	//        value. For full duplex operation, this value should be set 
-	//        to 40h. For gigabit half duplex, this value should be set to
-    //         200h. For 10/100 half duplex, this value should be set to 40h.
-    // 6. Set Transmit Inter Packet Gap (TIPG) register according to table
-    //    13-77 of section 13-4-34
 	uint32_t i;
 	pcibar0w(TDT, 0);
 	pcibar0w(TDH, 0);
 	pcibar0w(TDBAH, 0);
 	//cprintf("tx_descs = %08x, buffer_addr = %08x\n", tx_descs, tx_packet_buffer);
 	pcibar0w(TDBAL, PADDR(&tx_descs[0]));
-	pcibar0w(TDLEN, TX_DESC_LEN * sizeof(struct e1000_tx_desc));
+	pcibar0w(TDLEN, sizeof(tx_descs));
 	memset(tx_descs, 0, sizeof(struct e1000_tx_desc) * TX_DESC_LEN);
 	for (i = 0; i < TX_DESC_LEN; i++) {
 		tx_descs[i].buffer_addr = PADDR(tx_packet_buffer 
@@ -106,8 +132,61 @@ e1000_tx_init()
 		cprintf("tdh = %d, tdt = %d\n", pcibar0r(TDH), pcibar0r(TDT));
 		cprintf("tctl = %08x\n", pcibar0r(TCTL));
 		cprintf("tipg = %08x\n", pcibar0r(TIPG));
+	}	
+}
+
+// Receive Packet Initialization. 
+// NOTE: Must use PHYSICAL address for NIC buffer (descriptors and packet bufer).
+// 1. Alloc receive descriptor array (actually we have allocted). 
+//    And alloc packet buffer for every descriptor.
+// 2. Set RDBAL/RDBAH, RDLEN, RDH, RDT according to the receive descriptor
+//    array.
+// 3. Set Receive Address Regsiters(RAL/RAH). The registers store MAC address.
+// 4. Set MTA to 0
+// 5. Close Interrupt Set/Read Regiseter (IMS) now. When we need intterupt,
+//    we can set the bit for needed interrupt.
+// 6. Set Receive Control Register:
+//	  6.1 Close long packet by set RCTL.LPE to 0
+//    6.2 Set loopback mode bit (RCTL.LBM) to 00
+//    6.3 Set RCTL.BSIZE to the packet buffer size. If packet buffer size
+//        is larger than 2048 bytes, configure the Buffer Extension Size
+//       (RCTL.BSEX) bits 
+//    6.4 Set strip CRS bit (RCTL.SECRC) to 1.
+//    6.5 Set enable receive bit (RCTL.EN) to 1.
+static void 
+e1000_rx_init()
+{
+	pcibar0w(RDBAH, 0);
+	pcibar0w(RDBAL, PADDR(rx_descs));
+	pcibar0w(RDLEN, sizeof(rx_descs));
+	pcibar0w(RDH, 0);
+	pcibar0w(RDT, RECV_DESC_LEN - 1);
+	uint32_t i;
+	for (i = 0; i < RECV_DESC_LEN; i++) {
+		rx_descs[i].buffer_addr = PADDR(recv_packet_buffer 
+											+ i * RECV_DESC_PACKET_SIZE);
+		rx_descs[i].status = 0;
 	}
 	
+	uint32_t mac_low = 0x12005452;
+    uint32_t mac_high = 0x5634;
+    mac_high |= 0x80000000;
+    pcibar0w(RAL, mac_low);
+    pcibar0w(RAH, mac_high);
+    
+    pcibar0w(MTA, 0);
+    pcibar0w(IMS, 0);
+    
+    uint32_t reg_data = pcibar0r(RCTL);
+    if (RECV_DESC_PACKET_SIZE != 2048)
+		panic("recv packet size isn't 2048");
+    reg_data &= ~E1000_RCTL_LPE;
+    reg_data &= ~E1000_RCTL_LBM_MASK;
+    reg_data &= ~E1000_RCTL_SZ_MASK;
+    reg_data &= ~E1000_RCTL_BSEX;
+    reg_data |= E1000_RCTL_SECRC;
+    reg_data |= E1000_RCTL_EN;
+    pcibar0w(RCTL, reg_data);
 }
 
 int  
@@ -141,7 +220,7 @@ e1000_attach(struct pci_func *pcif)
 	cprintf("device_status = %08x\n", device_status);
 	
 	e1000_tx_init();
-
+	e1000_rx_init();
 	
 	return 0;
 }
@@ -149,10 +228,8 @@ e1000_attach(struct pci_func *pcif)
 int
 e1000_tx(uint8_t *buf, int len)
 {
-	//cprintf("e1000_tx: start\n");
 	assert(len <= TX_DESC_PACKET_SIZE);
-	uint32_t tdh, tdt, next;
-	//dh = pcibar0r(E1000_TDH / 4);
+	uint32_t tdt;
 	tdt = pcibar0r(TDT);
 	
 	while (!((tx_descs[tdt].lower.data & E1000_TXD_CMD_RS) 
@@ -177,6 +254,47 @@ e1000_tx(uint8_t *buf, int len)
 	return 0;
 }
 
-
-
+int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
+{
+	uint32_t rdh, rdt, recv_data_index, next_rdt;
+	rdh = pcibar0r(RDH);
+	rdt = pcibar0r(RDT);
+	
+	if (rx_descs[rdt].status & E1000_RXD_STAT_DD) {
+		recv_data_index = rdt;
+	}
+	else if (((rdt + 2) % RECV_DESC_LEN == rdh)
+			 &&  (rx_descs[(rdt + 1) % RECV_DESC_LEN].status & E1000_RXD_STAT_DD)) {
+		recv_data_index = (rdt + 1) % RECV_DESC_LEN;
+	}
+	else {
+		//cprintf("no data\n");
+		return -E_NO_DATA;
+	}
+	
+	//cprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+	//copy packets data to buf
+	struct e1000_rx_desc *rx_desc = &rx_descs[(rdt + 1) % RECV_DESC_LEN];
+	if (!(rx_desc->status & E1000_RXD_STAT_EOP))
+		panic("driver don't suport long packets");
+	*packet_size = rx_desc->length;
+	if (rx_desc->length > bufsize)
+		cprintf("e1000_rx: WARN!!!!! bufsize is smaller than packet_size, bufsize %08x, packet_size %08x\n", 
+				  bufsize, *packet_size);
+	memmove(buf, KADDR((uint32_t)rx_descs->buffer_addr), 
+		rx_desc->length > bufsize ? bufsize : rx_descs->length);
+	rx_desc->status = 0; 
+	
+	cprintf("e1000_rx: first db  %08x\n", *(uint32_t *)buf);
+	
+	//update rdt
+	if ((recv_data_index + 1) % RECV_DESC_LEN == rdh)
+		next_rdt = recv_data_index;
+	else
+		next_rdt = (recv_data_index + 1) % RECV_DESC_LEN;
+	
+	pcibar0w(RDT, next_rdt);
+		    
+	return 0;
+}
 

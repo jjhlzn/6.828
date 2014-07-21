@@ -478,6 +478,7 @@
 #define E1000_RCTL_LBM_MAC        0x00000040    /* MAC loopback mode */
 #define E1000_RCTL_LBM_SLP        0x00000080    /* serial link loopback mode */
 #define E1000_RCTL_LBM_TCVR       0x000000C0    /* tcvr loopback mode */
+#define E1000_RCTL_LBM_MASK       0x000000C0    /* LBM mask */
 #define E1000_RCTL_DTYP_MASK      0x00000C00    /* Descriptor type mask */
 #define E1000_RCTL_DTYP_PS        0x00000400    /* Packet Split descriptor */
 #define E1000_RCTL_RDMTS_HALF     0x00000000    /* rx desc min threshold size */
@@ -495,6 +496,7 @@
 #define E1000_RCTL_SZ_1024        0x00010000    /* rx buffer size 1024 */
 #define E1000_RCTL_SZ_512         0x00020000    /* rx buffer size 512 */
 #define E1000_RCTL_SZ_256         0x00030000    /* rx buffer size 256 */
+#define E1000_RCTL_SZ_MASK        0x00030000    /* buffer size bits MASK  */
 /* these buffer sizes are valid if E1000_RCTL_BSEX is 1 */
 #define E1000_RCTL_SZ_16384       0x00010000    /* rx buffer size 16384 */
 #define E1000_RCTL_SZ_8192        0x00020000    /* rx buffer size 8192 */

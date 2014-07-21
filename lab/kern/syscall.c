@@ -484,6 +484,20 @@ sys_net_send(void *buf, int len)
 	return e1000_tx((uint8_t *)buf, len);
 }
 
+
+// Inovke NIC driver to reiceive packet. If NIC rx descriptor ring is
+// empty, the system call return < 0 (-E_NO_DATA).
+// Return 0 for success.
+static int
+sys_net_recv(void *buf, int bufsize, int *packet_size)
+{
+	//cprintf("buf %08x, bufsize %08x, packet_size %08x\n", buf, bufsize, packet_size);
+	user_mem_assert(curenv, buf, bufsize, PTE_P | PTE_U | PTE_W);
+	user_mem_assert(curenv, packet_size, sizeof(int), PTE_P | PTE_U | PTE_W);
+	
+	return e1000_rx((uint8_t *)buf, bufsize, packet_size);
+}
+
 // Return the current time.
 static int
 sys_time_msec(void)
@@ -549,6 +563,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
 		case SYS_net_send:
 			ret = sys_net_send((void *)a1, (int)a2);
+			break;
+		case SYS_net_recv:
+			ret = sys_net_recv((void *)a1, (int)a2, (int *)a3);
 			break;
 		default:
 			cprintf("syscall: syscall(%d) doesn't exist!", ret);

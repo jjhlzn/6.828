@@ -10,6 +10,7 @@
 #include <kern/kclock.h>
 #include <kern/env.h>
 #include <kern/cpu.h>
+#include <kern/monitor.h>
 
 // These variables are set by i386_detect_memory()
 size_t npages;			// Amount of physical memory (in pages)
@@ -729,7 +730,24 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 		for ( ; va_pgaligned < end_va; va_pgaligned += PGSIZE) {
 			pte_t *ptep = NULL;
 			page_lookup(env->env_pgdir, (void *)va_pgaligned, &ptep);
-			if (!ptep || ((*ptep & (perm | PTE_P)) != (perm | PTE_P))) {
+			if (ptep) {
+				char msg[20];
+				get_pte_permission_desc(*ptep, msg);
+				//cprintf("pte: %s\n", msg);
+				//cprintf("%08x\n", *ptep);
+			}
+			else
+				cprintf("user_mem_check: no mapping!\n");
+			
+			if (!ptep) {
+				user_mem_check_addr = (va_pgaligned < (uint32_t)va ? 
+					(uint32_t)va : va_pgaligned);
+				r = -E_FAULT;
+			}
+			
+			if ((*ptep & (perm | PTE_P)) != (perm | PTE_P)) {
+				if (perm & PTE_W) { //check if has COPY_ON_WRITE
+				} 
 				user_mem_check_addr = (va_pgaligned < (uint32_t)va ? 
 					(uint32_t)va : va_pgaligned);
 				r = -E_FAULT;
