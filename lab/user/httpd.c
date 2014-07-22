@@ -49,6 +49,7 @@ die(char *m)
 static void
 req_free(struct http_request *req)
 {
+	printf("req->url: %08x, req->version: %08x\n", req->url, req->version);
 	free(req->url);
 	free(req->version);
 }
@@ -287,26 +288,33 @@ handle_client(int sock)
 		// Receive message
 		if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 			panic("failed to read");
-
+		cprintf("[%08x]: handle_client: receive a new message!\n", thisenv->env_id);
 		memset(req, 0, sizeof(req));
 
 		req->sock = sock;
 
 		r = http_request_parse(req, buffer);
-		if (r == -E_BAD_REQ)
+		if (r == -E_BAD_REQ) {
+			cprintf("[%08x]: handle_client: get a BAD request\n", thisenv->env_id);
 			send_error(req, 400);
+			cprintf("[%08x]: handle_client: send error finished\n", thisenv->env_id);
+		}
 		else if (r < 0)
 			panic("parse failed");
 		else
 			send_file(req);
-
-		req_free(req);
+		
+		cprintf("[%08x]: handle_client: try to free request\n", thisenv->env_id);
+		if (r != -E_BAD_REQ)
+			req_free(req);
+		cprintf("[%08x]: handle_client: finish free request\n", thisenv->env_id);
 
 		// no keep alive
 		break;
 	}
-
+	cprintf("[%08x]: handle_client: try to close sock\n", thisenv->env_id);
 	close(sock);
+	cprintf("[%08x]: handle_client: closed sock\n", thisenv->env_id);
 }
 
 void

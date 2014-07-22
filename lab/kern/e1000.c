@@ -68,6 +68,26 @@ pcibar0w(int index, int value)
 	//cprintf("value = %08x, value1 = %08x\n", value, pci_bar0[index]);
 }
 
+static void
+hexdump(const char *prefix, const void *data, int len)
+{
+	int i;
+	char buf[80];
+	char *end = buf + sizeof(buf);
+	char *out = NULL;
+	for (i = 0; i < len; i++) {
+		if (i % 16 == 0)
+			out = buf + snprintf(buf, end - buf,
+					     "%s%04x   ", prefix, i);
+		out += snprintf(out, end - out, "%02x", ((uint8_t*)data)[i]);
+		if (i % 16 == 15 || i == len - 1)
+			cprintf("%.*s\n", out - buf, buf);
+		if (i % 2 == 1)
+			*(out++) = ' ';
+		if (i % 16 == 7)
+			*(out++) = ' ';
+	}
+}
 
 // Tansimit packet initialization
 // alloc memmory transmit descriptors array and the packet buffer pointed
@@ -247,37 +267,13 @@ e1000_tx(uint8_t *buf, int len)
 	tx_descs[tdt].upper.fields.css = 0;
 
 	if (debug) {
-		//cprintf("buffer_addr = %08x %08x\n", *(uint32_t *)((char *)&tx_descs[tdt].buffer_addr + 4),
-		//				*(uint32_t *)&tx_descs[tdt].buffer_addr);
-		//cprintf("lower = %08x\n", tx_descs[tdt].lower.data);
-		//cprintf("uppper = %08x\n", tx_descs[tdt].upper.data);
-		cprintf("e1000_tx: buf %s\n", buf);
-		cprintf("e1000_tx: len %d\n", len);
+		hexdump("e1000_tx output:", buf, len);
 	}
 	pcibar0w(TDT, (tdt + 1) % TX_DESC_LEN);
 	return 0;
 }
 
-static void
-hexdump(const char *prefix, const void *data, int len)
-{
-	int i;
-	char buf[80];
-	char *end = buf + sizeof(buf);
-	char *out = NULL;
-	for (i = 0; i < len; i++) {
-		if (i % 16 == 0)
-			out = buf + snprintf(buf, end - buf,
-					     "%s%04x   ", prefix, i);
-		out += snprintf(out, end - out, "%02x", ((uint8_t*)data)[i]);
-		if (i % 16 == 15 || i == len - 1)
-			cprintf("%.*s\n", out - buf, buf);
-		if (i % 2 == 1)
-			*(out++) = ' ';
-		if (i % 16 == 7)
-			*(out++) = ' ';
-	}
-}
+
 
 static int ring_empty = 1;
 static int last_read_index = RECV_DESC_LEN - 1;

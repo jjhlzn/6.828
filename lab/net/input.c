@@ -3,7 +3,7 @@
 
 //extern union Nsipc nsipcbuf;
 
-#define debug 1
+#define debug 0
 
 static int turn = 0;
 static union Nsipc _nsipcbuf[2]
@@ -30,8 +30,8 @@ input(envid_t ns_envid)
 	_nsipcbuf[1].pkt.jp_len = 0;
 	while (1) {
 		uint32_t whom;
-		if (debug)
-			cprintf("[%08x]: start read packet from device driver ... \n", thisenv->env_id);
+		//if (debug)
+		//	cprintf("[%08x]: reading from NIC ... \n", thisenv->env_id);
 		int packet_size = 0;
 		int r;
 		while ((r = sys_net_recv(_nsipcbuf[turn].pkt.jp_data, 
@@ -42,7 +42,7 @@ input(envid_t ns_envid)
 			sys_yield();
 		}
 		if (debug) {
-			cprintf("[%08x]: read a packet from device driver, ready to send to NS \n",
+			cprintf("[%08x]: read a packet, ready to send to NS \n",
 					thisenv->env_id);
 			cprintf("[%08x]: packet_size = %d\n", thisenv->env_id, packet_size);
 		}
