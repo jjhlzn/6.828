@@ -279,25 +279,29 @@ hexdump(const char *prefix, const void *data, int len)
 	}
 }
 
-
+static int ring_empty = 1;
+static int last_read_index = RECV_DESC_LEN - 1;
 int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 {
 	uint32_t rdh, rdt, recv_data_index, next_rdt;
 	rdh = pcibar0r(RDH);
 	rdt = pcibar0r(RDT);
 	
-	if (rx_descs[rdt].status & E1000_RXD_STAT_DD) {
+	int try_index = 0;
+	if (ring_empty)
+		try_index = (last_read_index + 1) % RECV_DESC_LEN;
+		
+	if (rx_descs[try_index].status & E1000_RXD_STAT_DD) {
 		recv_data_index = rdt;
-	}
-	else if (((rdt + 2) % RECV_DESC_LEN == rdh)
-			 &&  (rx_descs[(rdt + 1) % RECV_DESC_LEN].status & E1000_RXD_STAT_DD)) {
-		recv_data_index = (rdt + 1) % RECV_DESC_LEN;
-	}
-	else {
+	} else {
 		//cprintf("no data\n");
+		ring_empty = 1;
 		return -E_NO_DATA;
 	}
 	
+	ring_empty = 0;
+	last_read_index = try_index;
+	recv_data_index = last_read_index;
 	//copy packets data to buf
 	if (!(rx_descs[recv_data_index].status & E1000_RXD_STAT_EOP))
 		panic("driver don't suport long packets");
@@ -316,11 +320,12 @@ int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 	}
 
 	//update rdt
-	if ((recv_data_index + 1) % RECV_DESC_LEN == rdh)
+	if ((recv_data_index + 1) % RECV_DESC_LEN == rdh) {
+		ring_empty = 0;
 		next_rdt = recv_data_index;
+	}
 	else
 		next_rdt = (recv_data_index + 1) % RECV_DESC_LEN;
-	
 	pcibar0w(RDT, next_rdt);
 		    
 	return 0;
