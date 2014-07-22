@@ -188,7 +188,7 @@ e1000_rx_init()
     reg_data |= E1000_RCTL_EN;
 
     pcibar0w(RCTL, reg_data);
-    
+		
 }
 
 int  
@@ -283,51 +283,34 @@ static int ring_empty = 1;
 static int last_read_index = RECV_DESC_LEN - 1;
 int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 {
-	uint32_t rdh, rdt, recv_data_index, next_rdt;
-	rdh = pcibar0r(RDH);
+	uint32_t rdt, recv_index;
+	
 	rdt = pcibar0r(RDT);
-	
-	int try_index = 0;
-	if (ring_empty)
-		try_index = (last_read_index + 1) % RECV_DESC_LEN;
-		
-	if (rx_descs[try_index].status & E1000_RXD_STAT_DD) {
-		recv_data_index = rdt;
-	} else {
-		//cprintf("no data\n");
-		ring_empty = 1;
+	recv_index = (rdt + 1) % RECV_DESC_LEN;
+
+	if (!rx_descs[recv_index].status) {
 		return -E_NO_DATA;
-	}
+	} 
 	
-	ring_empty = 0;
-	last_read_index = try_index;
-	recv_data_index = last_read_index;
-	//copy packets data to buf
-	if (!(rx_descs[recv_data_index].status & E1000_RXD_STAT_EOP))
+	if (!(rx_descs[recv_index].status & E1000_RXD_STAT_EOP))
 		panic("driver don't suport long packets");
-	*packet_size = rx_descs[recv_data_index].length;
-	
-	if (rx_descs[recv_data_index].length > bufsize)
+	//copy packets data to buf
+	*packet_size = rx_descs[recv_index].length;
+	if (rx_descs[recv_index].length > bufsize)
 		cprintf("e1000_rx: WARN!!!!! bufsize is smaller than packet_size\n", 
 				  bufsize, 
 				  *packet_size);
 	memmove(buf, 
-			KADDR((uint32_t)(rx_descs[recv_data_index].buffer_addr)), 
+			KADDR((uint32_t)(rx_descs[recv_index].buffer_addr)), 
 		   *packet_size > bufsize ? bufsize : *packet_size);
-	rx_descs[recv_data_index].status = 0; 
+	rx_descs[recv_index].status = 0; 
+	
 	if (debug) {
 		hexdump("e1000_rx input:", buf, *packet_size > bufsize ? bufsize : *packet_size);
 	}
-
 	//update rdt
-	if ((recv_data_index + 1) % RECV_DESC_LEN == rdh) {
-		ring_empty = 0;
-		next_rdt = recv_data_index;
-	}
-	else
-		next_rdt = (recv_data_index + 1) % RECV_DESC_LEN;
-	pcibar0w(RDT, next_rdt);
-		    
+	cprintf("rdh = %d, rdt = %d\n", pcibar0r(RDH), recv_index);
+	pcibar0w(RDT, recv_index);
 	return 0;
 } 
 
