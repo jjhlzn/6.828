@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/fd.h>
 #include <lwip/sockets.h>
 #include <lwip/inet.h>
 
@@ -73,11 +74,17 @@ send_header(struct http_request *req, int code)
 	return 0;
 }
 
+#define SEND_DATA_BUF 1024
 static int
 send_data(struct http_request *req, int fd)
 {
 	// LAB 6: Your code here.
-	panic("send_data not implemented");
+	int r;
+	char buf[SEND_DATA_BUF];
+	while ((r = read(fd, buf, SEND_DATA_BUF)) > 0) {
+		write(req->sock, buf, r);
+	}
+	return r;
 }
 
 static int
@@ -203,10 +210,13 @@ send_error(struct http_request *req, int code)
 			       "\r\n"
 			       "<html><body><p>%d - %s</p></body></html>\r\n",
 			       e->code, e->msg, e->code, e->msg);
-
-	if (write(req->sock, buf, r) != r)
+	cprintf("%s\n", buf);
+	if (write(req->sock, buf, r) != r) {
+		cprintf("send_error: write return error\n");
 		return -1;
+	}
 
+	cprintf("send_error: write success\n");
 	return 0;
 }
 
@@ -223,7 +233,26 @@ send_file(struct http_request *req)
 	// set file_size to the size of the file
 
 	// LAB 6: Your code here.
-	panic("send_file not implemented");
+	cprintf("[%08x]: send_file: url %s\n", thisenv->env_id, req->url);
+	
+	if ((fd = open(req->url, O_RDONLY))< 0) {
+		cprintf("[%08x]: send_file: %s doesn't exist!\n", thisenv->env_id, req->url);
+		send_error(req, 404);
+		goto end;
+	}
+	
+	struct Stat statbuf;
+	if (stat(req->url, &statbuf) < 0) {
+		send_error(req, 404);
+		goto end;
+	}
+	
+	if (statbuf.st_isdir) {
+		send_error(req, 404);
+		goto end;
+	}
+	
+	file_size = statbuf.st_size;
 
 	if ((r = send_header(req, 200)) < 0)
 		goto end;
