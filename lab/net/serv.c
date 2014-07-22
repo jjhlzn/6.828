@@ -232,6 +232,10 @@ serve_thread(uint32_t a) {
 	case NSREQ_INPUT:
 		jif_input(&nif, (void *)&req->pkt);
 		r = 0;
+		if (debug) {
+			cprintf("[%08x]: NS get packet from INPUT\n", thisenv->env_id);
+			cprintf("[%08x]: NS len = %d\n", thisenv->env_id, req->pkt.jp_len);
+		}
 		break;
 	default:
 		cprintf("Invalid request code %d from %08x\n", args->whom, args->req);
@@ -259,7 +263,7 @@ serve(void) {
 	uint32_t whom;
 	int i, perm;
 	void *va;
-
+	cprintf("[%08x]: I am NS\n", thisenv->env_id);
 	while (1) {
 		// ipc_recv will block the entire process, so we flush
 		// all pending work from other threads.  We limit the

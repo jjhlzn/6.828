@@ -48,7 +48,9 @@ umain(int argc, char **argv)
 	// Create the TCP socket
 	if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 		die("Failed to create socket");
-
+	
+	cprintf("[%08x]: I am echoserver\n", thisenv->env_id);
+	
 	cprintf("opened socket\n");
 
 	// Construct the server sockaddr_in structure

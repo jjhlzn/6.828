@@ -102,8 +102,7 @@ umain(int argc, char **argv)
 			panic("IPC from unexpected environment %08x", whom);
 		if (req != NSREQ_INPUT)
 			panic("Unexpected IPC %d", req);
-		
-		cprintf("input: first db  %08x\n", *(uint32_t *)pkt->jp_data);
+
 		hexdump("input: ", pkt->jp_data, pkt->jp_len);
 		cprintf("\n");
 

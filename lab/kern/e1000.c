@@ -186,11 +186,9 @@ e1000_rx_init()
     reg_data &= ~E1000_RCTL_BSEX;
     reg_data |= E1000_RCTL_SECRC;
     reg_data |= E1000_RCTL_EN;
-    //try ...
-    reg_data |= E1000_RCTL_BAM;
-    reg_data |= E1000_RCTL_UPE;
-    reg_data |= E1000_RCTL_SBP;
+
     pcibar0w(RCTL, reg_data);
+    
 }
 
 int  
@@ -282,46 +280,6 @@ hexdump(const char *prefix, const void *data, int len)
 }
 
 
-static int receive_index = 0;
-
-int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
-{
-	uint32_t rdh, rdt, recv_data_index, next_rdt;
-	rdh = pcibar0r(RDH);
-	rdt = pcibar0r(RDT);
-	
-	if (rx_descs[receive_index].status & E1000_RXD_STAT_DD) {
-	}
-	else {
-		//cprintf("no data\n");
-		return -E_NO_DATA;
-	}
-	
-	//cprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-	//copy packets data to buf
-	struct e1000_rx_desc *rx_desc = &rx_descs[receive_index];
-	if (!(rx_desc->status & E1000_RXD_STAT_EOP))
-		panic("driver don't suport long packets");
-	*packet_size = rx_desc->length;
-	
-	if (rx_desc->length > bufsize)
-		cprintf("e1000_rx: WARN!!!!! bufsize is smaller than packet_size, bufsize %08x, packet_size %08x\n", 
-				  bufsize, *packet_size);
-	memmove(buf, KADDR((uint32_t)rx_descs->buffer_addr), 
-		*packet_size > bufsize ? bufsize : *packet_size);
-	
-	if (debug) {
-		hexdump("input:", buf, *packet_size > bufsize ? bufsize : *packet_size);
-	}
-	rx_desc->status = 0; 
-	
-	pcibar0w(RDT, receive_index);
-	//cprintf("rdh = %d, rdt=%d\n", pcibar0r(RDH), pcibar0r(RDT));
-	receive_index++;	    
-	return 0;
-}
-
-/*
 int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 {
 	uint32_t rdh, rdt, recv_data_index, next_rdt;
@@ -340,24 +298,23 @@ int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 		return -E_NO_DATA;
 	}
 	
-	//cprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 	//copy packets data to buf
-	struct e1000_rx_desc *rx_desc = &rx_descs[recv_data_index];
-	if (!(rx_desc->status & E1000_RXD_STAT_EOP))
+	if (!(rx_descs[recv_data_index].status & E1000_RXD_STAT_EOP))
 		panic("driver don't suport long packets");
-	*packet_size = rx_desc->length;
+	*packet_size = rx_descs[recv_data_index].length;
 	
-	if (rx_desc->length > bufsize)
-		cprintf("e1000_rx: WARN!!!!! bufsize is smaller than packet_size, bufsize %08x, packet_size %08x\n", 
-				  bufsize, *packet_size);
-	memmove(buf, KADDR((uint32_t)rx_descs->buffer_addr), 
-		*packet_size > bufsize ? bufsize : *packet_size);
-		
+	if (rx_descs[recv_data_index].length > bufsize)
+		cprintf("e1000_rx: WARN!!!!! bufsize is smaller than packet_size\n", 
+				  bufsize, 
+				  *packet_size);
+	memmove(buf, 
+			KADDR((uint32_t)(rx_descs[recv_data_index].buffer_addr)), 
+		   *packet_size > bufsize ? bufsize : *packet_size);
+	rx_descs[recv_data_index].status = 0; 
 	if (debug) {
-		hexdump("input:", buf, *packet_size > bufsize ? bufsize : *packet_size);
+		hexdump("e1000_rx input:", buf, *packet_size > bufsize ? bufsize : *packet_size);
 	}
-	rx_desc->status = 0; 
-	
+
 	//update rdt
 	if ((recv_data_index + 1) % RECV_DESC_LEN == rdh)
 		next_rdt = recv_data_index;
@@ -365,7 +322,8 @@ int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 		next_rdt = (recv_data_index + 1) % RECV_DESC_LEN;
 	
 	pcibar0w(RDT, next_rdt);
-	//cprintf("rdh = %d, rdt=%d\n", pcibar0r(RDH), pcibar0r(RDT));
 		    
 	return 0;
-} */
+} 
+
+

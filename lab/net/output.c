@@ -12,7 +12,7 @@ output(envid_t ns_envid)
 	// LAB 6: Your code here:
 	// 	- read a packet from the network server
 	//	- send the packet to the device driver
-	
+	cprintf("[%08x]: I am OUTPUT\n", thisenv->env_id);
 	while (1) {
 		uint32_t whom;
 		if (debug)
@@ -26,9 +26,8 @@ output(envid_t ns_envid)
 		}
 		if (debug) {
 			cprintf("[%08x]: get a message from NS, ready to send \n", thisenv->env_id);
-			cprintf("addr of nsipcbuf = %08x\n",&nsipcbuf);
-			cprintf("nsipcbuf.pkt.jp_len = %d\n",nsipcbuf.pkt.jp_len);
-			cprintf("nsipcbuf.pkt.jp_data = %s\n",nsipcbuf.pkt.jp_data);
+			cprintf("[%08x]: nsipcbuf.pkt.jp_len = %d\n", thisenv->env_id, nsipcbuf.pkt.jp_len);
+			cprintf("[%08x]: nsipcbuf.pkt.jp_data = %s\n", thisenv->env_id, nsipcbuf.pkt.jp_data);
 		}
 		if (sys_net_send(nsipcbuf.pkt.jp_data, nsipcbuf.pkt.jp_len) , 0) {
 			panic("NS OUTPUT: send error");

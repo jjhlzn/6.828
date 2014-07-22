@@ -497,10 +497,7 @@ sys_net_recv(void *buf, int bufsize, int *packet_size)
 	user_mem_assert(curenv, buf, bufsize, PTE_P | PTE_U | PTE_W);
 	user_mem_assert(curenv, packet_size, sizeof(int), PTE_P | PTE_U | PTE_W);
 	
-	int r = e1000_rx((uint8_t *)buf, bufsize, packet_size);
-	if (r == 0)
-		cprintf("sys_net_recv: packet_size = %d\n", *packet_size);
-	return r;
+	return e1000_rx((uint8_t *)buf, bufsize, packet_size);
 }
 
 // Return the current time.

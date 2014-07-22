@@ -3,7 +3,7 @@
 
 extern union Nsipc nsipcbuf;
 
-#define debug 0
+#define debug 1
 
 void
 input(envid_t ns_envid)
