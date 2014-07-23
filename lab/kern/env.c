@@ -124,7 +124,7 @@ env_init(void)
 	for (i=0; i < NENV; i++) {
 		memset(envs + i, 0, sizeof(struct Env));
 		envs[i].env_id = 0;
-		envs[i].env_tf.tf_eflags =0x00000202;
+		envs[i].env_tf.tf_eflags =0x00000202; //enable EF_IF
 		//TODO: I'm not sure that env_link is linked by this way!
 		if (i+1 < NENV)
 			envs[i].env_link = envs + i + 1;

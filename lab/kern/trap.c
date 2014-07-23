@@ -234,6 +234,15 @@ trap_dispatch(struct Trapframe *tf)
 										  tf->tf_regs.reg_esi);
 			env_run(curenv);
 			break;
+		
+		// Handle clock interrupts. Don't forget to acknowledge the
+		// interrupt using lapic_eoi() before calling the scheduler!
+		// LAB 4: Your code here.
+
+		// Add time tick increment to clock interrupts.
+		// Be careful! In multiprocessors, clock interrupts are
+		// triggered on every CPU.
+		// LAB 6: Your code here.
 		case IRQ_OFFSET + IRQ_TIMER:
 			lapic_eoi();
 			time_tick();
@@ -248,16 +257,6 @@ trap_dispatch(struct Trapframe *tf)
 		print_trapframe(tf);
 		return;
 	}
-
-	// Handle clock interrupts. Don't forget to acknowledge the
-	// interrupt using lapic_eoi() before calling the scheduler!
-	// LAB 4: Your code here.
-
-	// Add time tick increment to clock interrupts.
-	// Be careful! In multiprocessors, clock interrupts are
-	// triggered on every CPU.
-	// LAB 6: Your code here.
-
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);

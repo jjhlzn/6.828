@@ -27,11 +27,13 @@
 #define RDH   (E1000_RDH / 4)
 #define IMS   (E1000_IMS / 4)
 #define RA    (E1000_RA / 4)
-#define RAL    (E1000_RA / 4)
-#define RAH    (E1000_RA / 4 + 1)
+#define RAL   (E1000_RA / 4)
+#define RAH   (E1000_RA / 4 + 1)
 #define MTA   (E1000_MTA / 4)
 
 #define EERD  (E1000_EERD / 4)
+#define ICR   (E1000_ICR / 4)
+#define IMS  (E1000_IMS / 4)
 
 
 volatile uint32_t *pci_bar0 = NULL;  //the mermoy address pointed by pci bar0
@@ -175,9 +177,18 @@ e1000_tx_init()
 //       (RCTL.BSEX) bits 
 //    6.4 Set strip CRS bit (RCTL.SECRC) to 1.
 //    6.5 Set enable receive bit (RCTL.EN) to 1.
+// 7. Configure the Receive Descriptor Minium Threshold Size (RCTL.RDMTS)
+//    bits to the desired value.
+// 8. Set Interrupt Mask Set/Read (IMS) regsiter to enable any interrupt
+//    the driver wants to be notified of when the ever occurs. Intel Documents
+//    suggests bits include RXT, RXO, RXDMT, RXSEQ, and LSC. No need to enable
+//    the transmit interrupts. Plan to optimize interrupts later, including 
+//    programming the interrupt moderation registers TIDV, TADV, RADV and IDTR.  
 static void 
 e1000_rx_init()
 {
+	uint32_t reg_data;
+	
 	pcibar0w(RDBAH, 0);
 	pcibar0w(RDBAL, PADDR(rx_descs));
 	pcibar0w(RDLEN, sizeof(rx_descs));
@@ -199,7 +210,19 @@ e1000_rx_init()
     pcibar0w(MTA, 0);
     pcibar0w(IMS, 0);
     
-    uint32_t reg_data = pcibar0r(RCTL);
+    // Enable receive interrupts
+    reg_data = pcibar0r(IMS);
+    reg_data |= E1000_IMS_RXT0; 
+    reg_data |= E1000_IMS_RXO;  
+    reg_data |= E1000_IMS_RXDMT0;
+    reg_data |= E1000_IMS_RXSEQ;
+    reg_data |= E1000_IMS_LSC;
+    pcibar0w(IMS, reg_data);
+    //cprintf("IMS = %08x\n", pcibar0r(IMS));
+    //cprintf("IMS = %08x\n", pcibar0r(IMS));
+    // TODO: Set TIDV, TADV, RADV, IDTR registers
+    
+    reg_data = pcibar0r(RCTL);
     if (RECV_DESC_PACKET_SIZE != 2048)
 		panic("recv packet size isn't 2048");
     reg_data &= ~E1000_RCTL_LPE;
@@ -208,9 +231,9 @@ e1000_rx_init()
     reg_data &= ~E1000_RCTL_BSEX;
     reg_data |= E1000_RCTL_SECRC;
     reg_data |= E1000_RCTL_EN;
+    reg_data |= E1000_RCTL_RDMTS_EIGTH; 
 
     pcibar0w(RCTL, reg_data);
-		
 }
 
 // Read MAC address from NIC
