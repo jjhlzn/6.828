@@ -497,7 +497,21 @@ sys_net_recv(void *buf, int bufsize, int *packet_size)
 	user_mem_assert(curenv, buf, bufsize, PTE_P | PTE_U | PTE_W);
 	user_mem_assert(curenv, packet_size, sizeof(int), PTE_P | PTE_U | PTE_W);
 	
-	return e1000_rx((uint8_t *)buf, bufsize, packet_size);
+	int r;
+	if ((r = e1000_rx((uint8_t *)buf, bufsize, packet_size)) == -E_NO_DATA) {
+		// since no data, we suspend current environment by marking it not 
+		// RUNNABLE. when a new packet received, we resume the environment. 
+		// now we need to make a flag to indicate the environment is suspended.
+		// And we need to save the arguments of the syscall userd by resume.
+		curenv->env_status = ENV_NOT_RUNNABLE;
+		curenv->env_net_recving = 1;
+		curenv->env_net_buf = buf;
+		curenv->env_net_buf_size = bufsize;
+		curenv->env_net_packet_size_store = packet_size;
+		suspend_env = curenv;
+		sched_yield();
+	} 
+	return r > 0 ? 0 : r;
 }
 
 static int

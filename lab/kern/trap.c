@@ -15,6 +15,7 @@
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
 #include <kern/time.h>
+#include <kern/e1000.h>
 
 static struct Taskstate ts;
 
@@ -248,6 +249,19 @@ trap_dispatch(struct Trapframe *tf)
 			time_tick();
 			sched_yield();
 			break;
+		
+		case IRQ_OFFSET + IRQ_NETWORK:
+			lapic_eoi(); //TODO: it seems the statement is useless.
+			irq_eoi();
+			//outb(0x00a0, 0x63);
+			//outb(0x0020, 0x62);
+			e1000_interrupt_handler();
+			break;
+		case IRQ_OFFSET + 15:
+			print_trapframe(tf);
+			sched_yield();
+			break;
+			
 	}
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the

@@ -8,6 +8,8 @@
 #include <kern/pci.h>
 #include <kern/e1000_hw.h>
 #include <kern/e1000.h>
+#include <kern/env.h>
+#include <kern/sched.h>
 
 #define debug 1
 
@@ -33,8 +35,9 @@
 
 #define EERD  (E1000_EERD / 4)
 #define ICR   (E1000_ICR / 4)
-#define IMS  (E1000_IMS / 4)
-
+#define IMS   (E1000_IMS / 4)
+#define ICS   (E1000_ICS / 4)
+#define IMC   (E1000_IMC / 4)
 
 volatile uint32_t *pci_bar0 = NULL;  //the mermoy address pointed by pci bar0
 
@@ -57,6 +60,8 @@ __attribute__ ((aligned(16)));
 static uint8_t recv_packet_buffer[RECV_DESC_LEN * RECV_DESC_PACKET_SIZE]
 __attribute__ ((aligned(2048)));
 
+struct Env *suspend_env = NULL; //store the environment suspended by empty 
+								//receive buffer
 
 static uint32_t
 pcibar0r(int index)
@@ -218,7 +223,9 @@ e1000_rx_init()
     reg_data |= E1000_IMS_RXSEQ;
     reg_data |= E1000_IMS_LSC;
     pcibar0w(IMS, reg_data);
-    //cprintf("IMS = %08x\n", pcibar0r(IMS));
+    //pcibar0w(ICS, reg_data);
+    cprintf("IMS = %08x\n", pcibar0r(IMS));
+    //cprintf("ICS = %08x\n", pcibar0r(ICS));
     //cprintf("IMS = %08x\n", pcibar0r(IMS));
     // TODO: Set TIDV, TADV, RADV, IDTR registers
     
@@ -368,5 +375,37 @@ e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 	pcibar0w(RDT, recv_index);
 	return 0;
 } 
+
+void 
+e1000_interrupt_handler()
+{
+	// Check if there any environment is suspended by empty receiver buffer
+	cprintf("interrupt!!!!\n");
+	
+	pcibar0r(ICR);
+	
+    //cprintf("IMS = %08x\n", pcibar0r(IMS));
+	//cprintf("ICS = %08x\n", pcibar0r(ICS));
+	if (!suspend_env) {
+		sched_yield();
+		return;
+	}
+	assert(suspend_env->env_net_recving);
+	
+	lcr3(PADDR(suspend_env->env_pgdir));
+	if (e1000_rx(suspend_env->env_net_buf, 
+				 suspend_env->env_net_buf_size,
+				 suspend_env->env_net_packet_size_store) < 0)
+		panic("receive packet receive interrupt, but e1000_rx return error!");
+	lcr3(PADDR(curenv->env_pgdir));
+	suspend_env->env_net_recving = 0;
+	suspend_env->env_tf.tf_regs.reg_eax = 0;
+	suspend_env->env_status = ENV_RUNNABLE;
+	suspend_env = NULL;
+	
+	//clear the receive handler
+	
+	sched_yield();
+}
 
 
