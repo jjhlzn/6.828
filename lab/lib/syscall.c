@@ -134,3 +134,9 @@ sys_net_recv(void *buf, int bufsize, int *packet_size)
 {
 	return syscall(SYS_net_recv, 1, (uint32_t)buf, bufsize, (uint32_t)packet_size, 0, 0);
 }
+
+int
+sys_net_read_mac_addr(void *buf)
+{
+	return syscall(SYS_net_read_mac_addr, 1, (uint32_t)buf, 0, 0, 0, 0);
+}

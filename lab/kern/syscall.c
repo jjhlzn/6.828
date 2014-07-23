@@ -500,6 +500,13 @@ sys_net_recv(void *buf, int bufsize, int *packet_size)
 	return e1000_rx((uint8_t *)buf, bufsize, packet_size);
 }
 
+static int
+sys_net_read_mac_addr(void *buf)
+{
+	user_mem_assert(curenv, buf, 6, PTE_P | PTE_U | PTE_W);
+	return e1000_read_mac_addr((uint8_t *)buf);
+}
+
 // Return the current time.
 static int
 sys_time_msec(void)
@@ -568,6 +575,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
 		case SYS_net_recv:
 			ret = sys_net_recv((void *)a1, (int)a2, (int *)a3);
+			break;
+		case SYS_net_read_mac_addr:
+			ret = sys_net_read_mac_addr((void *)a1);
 			break;
 		default:
 			cprintf("syscall: syscall(%d) doesn't exist!", ret);

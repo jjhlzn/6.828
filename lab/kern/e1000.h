@@ -7,5 +7,5 @@
 int e1000_attach(struct pci_func *pcif);
 int e1000_tx(uint8_t *buf, int len);
 int e1000_rx(uint8_t *buf, int bufsize, int *packet_size);
-
+int e1000_read_mac_addr(uint8_t *buf);
 #endif	// JOS_KERN_E1000_H

@@ -31,6 +31,8 @@
 #define RAH    (E1000_RA / 4 + 1)
 #define MTA   (E1000_MTA / 4)
 
+#define EERD  (E1000_EERD / 4)
+
 
 volatile uint32_t *pci_bar0 = NULL;  //the mermoy address pointed by pci bar0
 
@@ -188,11 +190,11 @@ e1000_rx_init()
 		rx_descs[i].status = 0;
 	}
 	
-	uint32_t mac_low = 0x12005452;
-    uint32_t mac_high = 0x5634;
-    mac_high |= 0x80000000;
-    pcibar0w(RAL, mac_low);
-    pcibar0w(RAH, mac_high);
+	uint8_t mac_addr[6];
+	e1000_read_mac_addr(mac_addr);
+
+    pcibar0w(RAL, *(uint32_t *)mac_addr);
+    pcibar0w(RAH, (*((uint32_t *)mac_addr + 1) & 0x0000FFFF) | 0x80000000);
     
     pcibar0w(MTA, 0);
     pcibar0w(IMS, 0);
@@ -209,6 +211,42 @@ e1000_rx_init()
 
     pcibar0w(RCTL, reg_data);
 		
+}
+
+// Read MAC address from NIC
+// Software can use the EEPROM Read register (EERD) to cause the 
+// Ethernet controller to read a word from the EEPROM that the 
+// software can then use. STEPS:
+// 1. software writes the address to read the Read Address (EERD.ADDR) 
+//    field and then simultaneously writes a 1b to the Start Read
+//    bit (EERD.START). 
+// 2. The Ethernet controller then reads the word from the EEPROM, 
+//    sets the Read Done bit (EERD.DONE), and puts the data in the 
+//    Read Data field (EERD.DATA). 
+// 3. Software can poll the EEPROM Read register until it sees the 
+//    EERD.DONE bit set, then use the data from the EERD.DATA field. 
+// Any words read this way are not written to hardware’s internal registers.
+int 
+e1000_read_mac_addr(uint8_t *buf)
+{
+	int i;
+	uint32_t reg_data = 0;
+	uint16_t *addrbuf = (uint16_t *)buf;
+	
+	for (i = 0; i < 3; i++) {
+		reg_data = 0;
+		reg_data |= i << E1000_EEPROM_RW_ADDR_SHIFT;
+		reg_data |= E1000_EEPROM_RW_REG_START;
+		reg_data &= ~E1000_EEPROM_RW_REG_DONE;
+		
+		pcibar0w(EERD, reg_data);
+		
+		while (!(pcibar0r(EERD) & E1000_EEPROM_RW_REG_DONE))
+			/* waiting */ ;
+		
+		addrbuf[i] = pcibar0r(EERD) >> E1000_EEPROM_RW_REG_DATA;
+	}
+	return 0;
 }
 
 int  
@@ -274,10 +312,8 @@ e1000_tx(uint8_t *buf, int len)
 }
 
 
-
-static int ring_empty = 1;
-static int last_read_index = RECV_DESC_LEN - 1;
-int e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
+int 
+e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 {
 	uint32_t rdt, recv_index;
 	
