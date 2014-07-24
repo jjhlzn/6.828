@@ -10,6 +10,7 @@
 #include <kern/e1000.h>
 #include <kern/env.h>
 #include <kern/sched.h>
+#include <kern/picirq.h>
 
 #define debug 1
 
@@ -309,6 +310,10 @@ e1000_attach(struct pci_func *pcif)
 	uint32_t device_status = pcibar0r(E1000_STATUS/4);
 	cprintf("device_status = %08x\n", device_status);
 	
+	//set interrupt
+	irq_mask_8259A &= ~(1 << pcif->irq_line);
+	irq_setmask_8259A(irq_mask_8259A);
+	
 	e1000_tx_init();
 	e1000_rx_init();
 	
@@ -375,36 +380,37 @@ e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 	pcibar0w(RDT, recv_index);
 	return 0;
 } 
-
+extern uint16_t irq_mask_8259A;
 void 
 e1000_interrupt_handler()
 {
 	// Check if there any environment is suspended by empty receiver buffer
-	cprintf("interrupt!!!!\n");
-	
+	//cprintf("interrupt!!!!\n");
 	pcibar0r(ICR);
-	
-    //cprintf("IMS = %08x\n", pcibar0r(IMS));
-	//cprintf("ICS = %08x\n", pcibar0r(ICS));
+
 	if (!suspend_env) {
+		cprintf("suspend_env is NULL\n");
 		sched_yield();
 		return;
 	}
-	assert(suspend_env->env_net_recving);
 	
+	assert(suspend_env->env_net_recving);
+
 	lcr3(PADDR(suspend_env->env_pgdir));
+
 	if (e1000_rx(suspend_env->env_net_buf, 
 				 suspend_env->env_net_buf_size,
 				 suspend_env->env_net_packet_size_store) < 0)
 		panic("receive packet receive interrupt, but e1000_rx return error!");
-	lcr3(PADDR(curenv->env_pgdir));
+		
+	lcr3(PADDR(curenv->env_pgdir)); 
+	
 	suspend_env->env_net_recving = 0;
 	suspend_env->env_tf.tf_regs.reg_eax = 0;
 	suspend_env->env_status = ENV_RUNNABLE;
 	suspend_env = NULL;
 	
 	//clear the receive handler
-	
 	sched_yield();
 }
 

@@ -251,14 +251,14 @@ trap_dispatch(struct Trapframe *tf)
 			break;
 		
 		case IRQ_OFFSET + IRQ_NETWORK:
-			lapic_eoi(); //TODO: it seems the statement is useless.
+			//lapic_eoi(); //TODO: it seems the statement is useless.
 			irq_eoi();
-			//outb(0x00a0, 0x63);
-			//outb(0x0020, 0x62);
 			e1000_interrupt_handler();
 			break;
 		case IRQ_OFFSET + 15:
-			print_trapframe(tf);
+			//cprintf("env: %08x\n", curenv->env_id);
+			//print_trapframe(tf);
+			cprintf("WARN: Ignore HARDWARE Interrupt[15]!\n");
 			sched_yield();
 			break;
 			
