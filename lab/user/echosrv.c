@@ -30,10 +30,13 @@ handle_client(int sock)
 			die("Failed to send bytes to client");
 
 		// Check for more data
+		cprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!watiing to read....\n");
 		if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 			die("Failed to receive additional bytes from client");
+		cprintf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!have read data\n");
 	}
 	close(sock);
+	cprintf("bye!\n");
 }
 
 void
