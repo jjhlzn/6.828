@@ -62,6 +62,15 @@ struct Pseudodesc gdt_pd = {
 	sizeof(gdt) - 1, (unsigned long) gdt
 };
 
+
+char *env_status_msg[5] = {
+	"ENV_FREE",
+	"ENV_DYING",
+	"ENV_RUNNABLE",
+	"ENV_RUNNING",
+	"ENV_NOT_RUNNABLE"
+};
+
 //
 // Converts an envid to an env pointer.
 // If checkperm is set, the specified environment must be either the

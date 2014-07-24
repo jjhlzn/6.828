@@ -385,7 +385,7 @@ void
 e1000_interrupt_handler()
 {
 	// Check if there any environment is suspended by empty receiver buffer
-	//cprintf("interrupt!!!!\n");
+	cprintf("interrupt!!!!\n");
 	pcibar0r(ICR);
 
 	if (!suspend_env) {

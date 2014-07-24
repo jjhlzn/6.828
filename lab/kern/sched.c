@@ -60,8 +60,11 @@ sched_yield(void)
 	// For debugging and testing purposes, if there are no
 	// runnable environments other than the idle environments,
 	// drop into the kernel monitor.
+	// NOTE: because of receive interrupt, we must jump into ENV_TYPE_IDLE.
+	// Otherwise, when there is no env running, and packet receive, but in
+	// kernel mode, we can't receive hardware interrupt.
 	for (i = 0; i < NENV; i++) {
-		if (envs[i].env_type != ENV_TYPE_IDLE &&
+		if ( //envs[i].env_type != ENV_TYPE_IDLE &&
 		    (envs[i].env_status == ENV_RUNNABLE ||
 		     envs[i].env_status == ENV_RUNNING))
 			break;

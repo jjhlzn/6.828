@@ -38,6 +38,8 @@ enum {
 	ENV_NOT_RUNNABLE
 };
 
+extern char *env_status_msg[];
+
 // Special environment types
 enum EnvType {
 	ENV_TYPE_USER = 0,

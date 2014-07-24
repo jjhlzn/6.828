@@ -46,7 +46,8 @@ static struct Command commands[] = {
 	{ "setptpermission", "Set page table permission", mon_setptpermission },
 	{ "dump", "Dump memory contents", mon_dump},
 	{ "continue", "Continue execution after breakpoint exception", mon_continue},
-	{ "freepageinfo", "Display free page info", mon_freepageinfo}
+	{ "freepageinfo", "Display free page info", mon_freepageinfo},
+	{ "ps", "Display env info", mon_ps}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -333,7 +334,20 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 		dump_phys_mem(start_addr, end_addr);
 	}
 	return 0;
-} 		
+} 	
+
+int 
+mon_ps(int argc, char **argv, struct Trapframe *tf)
+{
+	int i;
+	cprintf("%8s	%16s	\n", "ENV", "STATUS");
+	for (i = 0; i < NENV; i++) {
+		if (envs[i].env_status)
+			cprintf("%08x	%16s\n", envs[i].env_id, 
+					env_status_msg[envs[i].env_status]);
+	}
+	return 0;
+}	
 
 static void 
 dump_virtual_mem (uintptr_t start_addr, uintptr_t end_addr)

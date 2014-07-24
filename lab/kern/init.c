@@ -56,6 +56,7 @@ i386_init(void)
 	pci_init();
 	
 	//test, send packet
+	/*
 	char msg[] = "hello                                           fsdfdsfdsfdsfdsfdsfdsfsdf";
 	int msg_len = strlen(msg);
 	msg[0] = 0x52;
@@ -66,7 +67,7 @@ i386_init(void)
 	msg[5] = 0x56;
 	int j;
 	for(j=0; j<2; j++)
-		e1000_tx((uint8_t *)msg, msg_len);
+		e1000_tx((uint8_t *)msg, msg_len);*/
 
 	// Acquire the big kernel lock before waking up APs
 	// Your code here:
