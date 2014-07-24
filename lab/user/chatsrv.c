@@ -78,7 +78,7 @@ recv_client_ipc()
 	envid_t who;
 	int size;
 	while (1) {
-		size = -ipc_recv(&who, recv_msg, 0);
+		size = ipc_recv(&who, recv_msg, 0);
 		cprintf("message from %08x", who);
 		send_to_all_members(recv_msg, size);
 	}
@@ -97,18 +97,27 @@ handle_client(envid_t sendto, int sock)
 	data = (char *)UTEMP;
 	
 	while(1){
-		cprintf("fsfsfsfsf\n");
 		// Receive message
 		if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 			die("Failed to receive initial bytes from client");
 		cprintf("received = %d\n", received);
+		if (received < 0) {
+			cprintf("read return < 0\n");
+			break;
+		}
+		/*
+		if (received == 0) {
+			cprintf("read return 0\n");
+			break;
+		}*/
 		// Send bytes and check for more incoming data in loop
 		while (received > 0) {
 			// Send back received data
 			if (write(sock, buffer, received) != received)
 				die("Failed to send bytes to client");
 			memmove(data, buffer, received);
-			//ipc_send(sendto, -received, data, PTE_P | PTE_U);
+			cprintf("[%08x]: send to other chat member\n", thisenv->env_id);
+			ipc_send(sendto, received, data, PTE_P | PTE_U);
 			// Check for more data
 			if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 				die("Failed to receive additional bytes from client");
@@ -128,6 +137,7 @@ receive_from_others(int sock)
 	int size;
 	while (1) {
 		size = ipc_recv(&who, recv_msg, 0);
+		cprintf("[%08x]: receive from others\n", thisenv->env_id);
 		if (write(sock, recv_msg, size) != size)
 				die("Failed to send bytes to client");
 	}
@@ -176,7 +186,7 @@ umain(int argc, char **argv)
 	
 	
 	int recv_client_pid = 0;
-	/*
+	
 	
 	if ((recv_client_pid = fork()) < 0)
 		die("Failed to fork");
@@ -184,13 +194,13 @@ umain(int argc, char **argv)
 	if (recv_client_pid == 0) {
 		recv_client_ipc();
 		return;
-	}*/
+	}
+	
 	free_list_elems[0].member = 0;
 	if (sys_page_map(0, free_list_elems, recv_client_pid, 
 			free_list_elems, PTE_U | PTE_P | PTE_W) < 0)
 		panic("sys_page_map return error!");
 
-	int count=0;
 	// Run until canceled
 	while (1) {
 		unsigned int clientlen = sizeof(echoclient);
@@ -203,16 +213,17 @@ umain(int argc, char **argv)
 		cprintf("Client connected: %s\n", inet_ntoa(echoclient.sin_addr));
 		
 		int client_pid;
+		cprintf("clientsock = %d\n", clientsock);
 		if ((client_pid = fork()) < 0)
 			panic("fork error");
 			
 		if (client_pid == 0) {
+			cprintf("clientsock = %d\n", clientsock);
 			cprintf("[%08x]: i'll handle client request\n", thisenv->env_id);
 			handle_client(recv_client_pid,clientsock);
 			return;
 		}
 		
-		/*
 		if ((client_pid = fork()) < 0) {
 			panic("fork error");
 		}
@@ -222,12 +233,6 @@ umain(int argc, char **argv)
 			return;
 		}
 		add_mem(client_pid);
-		int xx = 1000000000;
-		while(xx--);
-		//panic("");
-		
-		count++;*/
-	
 	}
 	close(serversock);
 }
