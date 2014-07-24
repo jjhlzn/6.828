@@ -63,10 +63,19 @@ sched_yield(void)
 	// NOTE: because of receive interrupt, we must jump into ENV_TYPE_IDLE.
 	// Otherwise, when there is no env running, and packet receive, but in
 	// kernel mode, we can't receive hardware interrupt.
+	// So, we check whether there is any env waiting for NIC receive interrupt.
+	// if no, we just run into kernel monitor, or we run idle. 
+	int env_net_recv = 0;
 	for (i = 0; i < NENV; i++) {
-		if ( //envs[i].env_type != ENV_TYPE_IDLE &&
-		    (envs[i].env_status == ENV_RUNNABLE ||
-		     envs[i].env_status == ENV_RUNNING))
+		if (envs[i].env_net_recving) {
+			env_net_recv = 1;
+			break;
+		}
+	}
+	
+	for (i = 0; i < NENV; i++) {
+		if ( (env_net_recv ? 1 : envs[i].env_type != ENV_TYPE_IDLE) &&
+		    (envs[i].env_status == ENV_RUNNABLE || envs[i].env_status == ENV_RUNNING))
 			break;
 	}
 	if (i == NENV) {
