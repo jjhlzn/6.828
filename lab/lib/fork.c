@@ -17,7 +17,7 @@ pgfault(struct UTrapframe *utf)
 	void *addr = (void *) utf->utf_fault_va;
 	uint32_t err = utf->utf_err;
 	int r;
-
+	
 	// Check that the faulting access was (1) a write, and (2) to a
 	// copy-on-write page.  If not, panic.
 	// Hint:
@@ -30,7 +30,7 @@ pgfault(struct UTrapframe *utf)
 		panic("pgfault: not caused by write access, addr = %08x, err = %08x!", addr, err);
 	
 	if (!(pte & PTE_COW))
-		panic("pgfault: the page of 0x%08x is not PTE_COW\n",addr);
+		panic("pgfault: the page of 0x%08x is not PTE_COW, eip = %08x\n",addr, utf->utf_eip);
 	
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new

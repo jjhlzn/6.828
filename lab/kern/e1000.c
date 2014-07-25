@@ -12,7 +12,7 @@
 #include <kern/sched.h>
 #include <kern/picirq.h>
 
-#define debug 1
+#define debug 0
 
 #define TDBAH (E1000_TDBAH / 4)
 #define TDBAL (E1000_TDBAL / 4)

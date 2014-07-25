@@ -17,6 +17,8 @@
 #include <kern/time.h>
 #include <kern/e1000.h>
 
+void user_page_fault_handler(struct Trapframe *tf, uintptr_t fault_va);
+
 static struct Taskstate ts;
 
 /* For debugging, so print_trapframe can distinguish between printing
@@ -396,6 +398,14 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	user_page_fault_handler(tf, fault_va);
+}
+
+void 
+user_page_fault_handler(struct Trapframe *tf, uintptr_t fault_va)
+{
+	if (curenv->env_id == 0x0000100a)
+		print_trapframe(tf);
 	if (curenv->env_pgfault_upcall) {
 		
 		int skip_bytes = 0;
@@ -434,13 +444,13 @@ page_fault_handler(struct Trapframe *tf)
 		tf->tf_eip = (uint32_t)curenv->env_pgfault_upcall; //return to user env page fault handler
 
 		env_run(curenv);
+	} else {
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+			curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
+		env_destroy(curenv);
 	}
-
-	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
 }
 
 void 

@@ -19,7 +19,7 @@ struct List {
 	struct List *next;
 };
 
-#define MAX_CHAT_COUNT 10
+#define MAX_CHAT_COUNT (PGSIZE / sizeof(struct List))
 struct List free_list_elems[MAX_CHAT_COUNT]
 __attribute__ ((aligned(PGSIZE)));
 
@@ -43,6 +43,7 @@ add_mem(envid_t env)
 	if (get_free_list_elem(&elem) < 0)
 		return -1;
 	elem->member = env;
+	cprintf("add a new chat meber: end_id = %08x\n", env);
 	return 0;
 }
 
@@ -61,10 +62,10 @@ send_to_all_members(char *buf, int size)
 	int i;
 	for (i = 0; i < MAX_CHAT_COUNT; i++)
 		if (free_list_elems[i].member != -1) {
-			cprintf("member = %d\n", free_list_elems[i].member);
+			cprintf("send to env_id %08x\n", free_list_elems[i].member);
 			int r;
 			ipc_send(free_list_elems[i].member, size, buf, PTE_P | PTE_U);
-			cprintf("send to a member\n");
+			cprintf("send success!\n");
 		}
 }
 
@@ -79,7 +80,9 @@ recv_client_ipc()
 	int size;
 	while (1) {
 		size = ipc_recv(&who, recv_msg, 0);
-		cprintf("message from %08x", who);
+		cprintf("message from %08x\n", who);
+		asm volatile("int $3");
+		cprintf("recv_client_ipc: free_list_elems[0].member = %08x\n", free_list_elems[0].member);
 		send_to_all_members(recv_msg, size);
 	}
 }
@@ -100,16 +103,13 @@ handle_client(envid_t sendto, int sock)
 		// Receive message
 		if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 			die("Failed to receive initial bytes from client");
+			
 		cprintf("received = %d\n", received);
 		if (received < 0) {
 			cprintf("read return < 0\n");
 			break;
 		}
-		/*
-		if (received == 0) {
-			cprintf("read return 0\n");
-			break;
-		}*/
+		
 		// Send bytes and check for more incoming data in loop
 		while (received > 0) {
 			// Send back received data
@@ -184,10 +184,7 @@ umain(int argc, char **argv)
 
 	cprintf("bound\n");
 	
-	
 	int recv_client_pid = 0;
-	
-	
 	if ((recv_client_pid = fork()) < 0)
 		die("Failed to fork");
 	
@@ -196,11 +193,17 @@ umain(int argc, char **argv)
 		return;
 	}
 	
-	free_list_elems[0].member = 0;
-	if (sys_page_map(0, free_list_elems, recv_client_pid, 
+	cprintf("free_list_elems = %08x\n",free_list_elems);
+	//cancle page-on-write on free_list_elems
+	if (sys_page_map(0, free_list_elems, 0, 
 			free_list_elems, PTE_U | PTE_P | PTE_W) < 0)
 		panic("sys_page_map return error!");
+	if (sys_page_map(0, free_list_elems, recv_client_pid, 
+			free_list_elems, PTE_U | PTE_P) < 0)
+		panic("sys_page_map return error!");
+	free_list_elems[0].member = -1;
 
+	
 	// Run until canceled
 	while (1) {
 		unsigned int clientlen = sizeof(echoclient);
@@ -212,10 +215,17 @@ umain(int argc, char **argv)
 		}
 		cprintf("Client connected: %s\n", inet_ntoa(echoclient.sin_addr));
 		
+		
 		int client_pid;
 		cprintf("clientsock = %d\n", clientsock);
 		if ((client_pid = fork()) < 0)
 			panic("fork error");
+		
+		if (client_pid > 0) {
+			add_mem(client_pid);
+			cprintf("!!!!!!srv: free_list_elems[0].member = %08x\n", free_list_elems[0].member);
+			asm volatile ("int $3");
+		}	
 			
 		if (client_pid == 0) {
 			cprintf("clientsock = %d\n", clientsock);
@@ -232,7 +242,7 @@ umain(int argc, char **argv)
 			receive_from_others(clientsock);
 			return;
 		}
-		add_mem(client_pid);
+		
 	}
 	close(serversock);
 }

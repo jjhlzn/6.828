@@ -1501,7 +1501,7 @@
  * API_MSG_DEBUG: Enable debugging in api_msg.c.
  */
 #ifndef API_MSG_DEBUG
-#define API_MSG_DEBUG                   LWIP_DBG_OFF
+#define API_MSG_DEBUG                   LWIP_DBG_ON
 #endif
 
 /**

@@ -15,6 +15,8 @@
 #include <kern/pci.h>
 #include <kern/e1000.h>
 
+#define PTE_COW		0x800
+
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
 // Destroys the environment on memory errors.
@@ -249,7 +251,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	
 	return 0;
 }
-
+void user_page_fault_handler(struct Trapframe *tf, uintptr_t fault_va);
 // Map the page of memory at 'srcva' in srcenvid's address space
 // at 'dstva' in dstenvid's address space with permission 'perm'.
 // Perm has the same restrictions as in sys_page_alloc, except
@@ -266,6 +268,8 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 //	-E_INVAL if (perm & PTE_W), but srcva is read-only in srcenvid's
 //		address space.
 //	-E_NO_MEM if there's no memory to allocate any necessary page tables.
+//
+// The syscall should know POW (page_on_write)
 static int
 sys_page_map(envid_t srcenvid, void *srcva,
 	     envid_t dstenvid, void *dstva, int perm)
@@ -301,8 +305,16 @@ sys_page_map(envid_t srcenvid, void *srcva,
 		cprintf("invalid paramters2, perm = %08x\n", perm);
 		return -E_INVAL;
 	}
+	
 		
 	if((perm & PTE_W) && !(*ptep & PTE_W)) {
+		if (*ptep & PTE_COW) {
+			// kernel should cause a page_fualt exception for the env.
+			curenv->env_tf.tf_err = (FEC_U | FEC_WR | FEC_PR);
+			curenv->env_tf.tf_trapno = T_PGFLT;
+			curenv->env_tf.tf_eip = 0x801426;
+			user_page_fault_handler(&curenv->env_tf, (uintptr_t)srcva);
+		}
 		cprintf("invalid paramters3\n");
 		return -E_INVAL;
 	}
