@@ -63,10 +63,6 @@ endif
 
 # try to generate a unique GDB port
 GDBPORT	:= $(shell expr `id -u` % 5000 + 25000)
-# QEMU's gdb stub command line changed in 0.11
-QEMUGDB = $(shell if $(QEMU) -nographic -help | grep -q '^-gdb'; \
-	then echo "-gdb tcp::$(GDBPORT)"; \
-	else echo "-s -p $(GDBPORT)"; fi)
 
 CC	:= $(GCCPREFIX)gcc -pipe
 AS	:= $(GCCPREFIX)as
@@ -78,15 +74,20 @@ NM	:= $(GCCPREFIX)nm
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
+NATIVE_CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall
 TAR	:= gtar
 PERL	:= perl
 
 # Compiler flags
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
 # Only optimize to -O1 to discourage inlining, which complicates backtraces.
-CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD 
+CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD
 CFLAGS += -fno-omit-frame-pointer
 CFLAGS += -Wall -Wno-format -Wno-unused -Werror -gstabs -m32
+
+CFLAGS += -I$(TOP)/net/lwip/include \
+	  -I$(TOP)/net/lwip/include/ipv4 \
+	  -I$(TOP)/net/lwip/jos
 
 # Add -fno-stack-protector if the option exists.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
@@ -119,41 +120,68 @@ all:
 KERN_CFLAGS := $(CFLAGS) -DJOS_KERNEL -gstabs
 USER_CFLAGS := $(CFLAGS) -DJOS_USER -gstabs
 
-
+# Update .vars.X if variable X has changed since the last make run.
+#
+# Rules that use variable X should depend on $(OBJDIR)/.vars.X.  If
+# the variable's value has changed, this will update the vars file and
+# force a rebuild of the rule that depends on it.
+$(OBJDIR)/.vars.%: FORCE
+	$(V)echo "$($*)" | cmp -s $@ || echo "$($*)" > $@
+.PRECIOUS: $(OBJDIR)/.vars.%
+.PHONY: FORCE
 
 
 # Include Makefrags for subdirectories
 include boot/Makefrag
 include kern/Makefrag
+include lib/Makefrag
+include user/Makefrag
+include fs/Makefrag
+include net/Makefrag
 
 
+CPUS ?= 1
+
+PORT7	:= $(shell expr $(GDBPORT) + 1)
+PORT80	:= $(shell expr $(GDBPORT) + 2)
+
+QEMUOPTS = -hda $(OBJDIR)/kern/kernel.img -serial mon:stdio -gdb tcp::$(GDBPORT)
+QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 IMAGES = $(OBJDIR)/kern/kernel.img
-QEMUOPTS = -hda $(OBJDIR)/kern/kernel.img -serial mon:stdio $(QEMUEXTRA)
-#QEMUOPTS = -hda $(OBJDIR)/kern/kernel.img 
+QEMUOPTS += -smp $(CPUS)
+QEMUOPTS += -hdb $(OBJDIR)/fs/fs.img
+IMAGES += $(OBJDIR)/fs/fs.img
+QEMUOPTS += -net user -net nic,model=e1000 -redir tcp:$(PORT7)::7 \
+	   -redir tcp:$(PORT80)::80 -redir udp:$(PORT7)::7 -net dump,file=qemu.pcap
+QEMUOPTS += $(QEMUEXTRA)
 
 .gdbinit: .gdbinit.tmpl
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
 
-qemu: $(IMAGES)
+pre-qemu: .gdbinit
+#	QEMU doesn't truncate the pcap file.  Work around this.
+	@rm -f qemu.pcap
+
+qemu: $(IMAGES) pre-qemu
 	$(QEMU) $(QEMUOPTS)
 
-qemu-nox: $(IMAGES)
+qemu-nox: $(IMAGES) pre-qemu
 	@echo "***"
 	@echo "*** Use Ctrl-a x to exit qemu"
 	@echo "***"
 	$(QEMU) -nographic $(QEMUOPTS)
 
-qemu-gdb: $(IMAGES) .gdbinit
+qemu-gdb: $(IMAGES) pre-qemu
 	@echo "***"
 	@echo "*** Now run 'gdb'." 1>&2
 	@echo "***"
-	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
+	$(QEMU) $(QEMUOPTS) -S
 
-qemu-nox-gdb: $(IMAGES) .gdbinit
+qemu-nox-gdb: $(IMAGES) pre-qemu
 	@echo "***"
 	@echo "*** Now run 'gdb'." 1>&2
 	@echo "***"
-	$(QEMU) -nographic $(QEMUOPTS) -S $(QEMUGDB)
+	$(QEMU) -nographic $(QEMUOPTS) -S
 
 print-qemu:
 	@echo $(QEMU)
@@ -161,33 +189,85 @@ print-qemu:
 print-gdbport:
 	@echo $(GDBPORT)
 
-print-qemugdb:
-	@echo $(QEMUGDB)
-
 # For deleting the build
 clean:
-	rm -rf $(OBJDIR) .gdbinit jos.in
+	rm -rf $(OBJDIR) .gdbinit jos.in qemu.log
 
 realclean: clean
-	rm -rf lab$(LAB).tar.gz jos.out
+	rm -rf lab$(LAB).tar.gz \
+		jos.out $(wildcard jos.out.*) \
+		qemu.pcap $(wildcard qemu.pcap.*)
 
 distclean: realclean
 	rm -rf conf/gcc.mk
 
-grade: $(LABSETUP)grade-lab$(LAB).sh
+ifneq ($(V),@)
+GRADEFLAGS += -v
+endif
+
+grade:
 	@echo $(MAKE) clean
 	@$(MAKE) clean || \
 	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
-	$(MAKE) all
-	sh $(LABSETUP)grade-lab$(LAB).sh
+	./grade-lab$(LAB) $(GRADEFLAGS)
 
 handin: tarball
 	@echo Please visit http://pdos.csail.mit.edu/6.828/submit/
 	@echo and upload lab$(LAB)-handin.tar.gz.  Thanks!
 
-tarball: realclean
-	tar cf - `find . -type f | grep -v '^\.*$$' | grep -v '/CVS/' | grep -v '/\.svn/' | grep -v '/\.git/' | grep -v 'lab[0-9].*\.tar\.gz'` | gzip > lab$(LAB)-handin.tar.gz
+tarball:
+	@if test "$$(git symbolic-ref HEAD)" != refs/heads/lab$(LAB); then \
+		git branch; \
+		read -p "You are not on the lab$(LAB) branch.  Handin the current branch? [y/N] " r; \
+		test "$$r" = y; \
+	fi
+	@if ! git diff-files --quiet || ! git diff-index --quiet --cached HEAD; then \
+		git status; \
+		echo; \
+		echo "You have uncomitted changes.  Please commit or stash them."; \
+		false; \
+	fi
+	@if test -n "`git ls-files -o --exclude-standard`"; then \
+		git status; \
+		read -p "Untracked files will not be handed in.  Continue? [y/N] " r; \
+		test "$$r" = y; \
+	fi
+	git archive --format=tar HEAD | gzip > lab$(LAB)-handin.tar.gz
 
+# For test runs
+prep-net_%: override INIT_CFLAGS+=-DTEST_NO_NS
+
+prep-%:
+	$(V)$(MAKE) "INIT_CFLAGS=${INIT_CFLAGS} -DTEST=`case $* in *_*) echo $*;; *) echo user_$*;; esac`" $(IMAGES)
+
+run-%-nox-gdb: prep-% pre-qemu
+	$(QEMU) -nographic $(QEMUOPTS) -S
+
+run-%-gdb: prep-% pre-qemu
+	$(QEMU) $(QEMUOPTS) -S
+
+run-%-nox: prep-% pre-qemu
+	$(QEMU) -nographic $(QEMUOPTS)
+
+run-%: prep-% pre-qemu
+	$(QEMU) $(QEMUOPTS)
+
+# For network connections
+which-ports:
+	@echo "Local port $(PORT7) forwards to JOS port 7 (echo server)"
+	@echo "Local port $(PORT80) forwards to JOS port 80 (web server)"
+
+nc-80:
+	nc localhost $(PORT80)
+
+nc-7:
+	nc localhost $(PORT7)
+
+telnet-80:
+	telnet localhost $(PORT80)
+
+telnet-7:
+	telnet localhost $(PORT7)
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,

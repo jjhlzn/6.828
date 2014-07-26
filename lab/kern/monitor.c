@@ -11,19 +11,22 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <kern/pmap.h>
+#include <kern/trap.h>
+#include <kern/env.h>
+#include <kern/sched.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
-static void get_pte_permission_desc(uint16_t pte_permission, char *msg);
-static void show_pte_mappings(int pdx, intptr_t from_addr, intptr_t end_addr);
+static void show_pte_mappings(pde_t *pgdir, int pdx, uintptr_t from_addr, uintptr_t end_addr);
 static int parse_str2int(char *str);
 static int atoi(char *str, int base);
-static void dump_virtual_mem (intptr_t start_addr, intptr_t end_addr);
-static void dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr);
-static void dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr);
-static void dump_prefix_empty (intptr_t start_addr);
-static void dump_db (intptr_t addr, uint32_t dw);
+static void dump_virtual_mem (pde_t* pgdir, uintptr_t start_addr, uintptr_t end_addr);
+static void dump_virtual_mem_per_pde(pde_t *pgdir, uintptr_t start_addr, uintptr_t end_addr);
+static void dump_virtual_mem_per_pte(pde_t *pgdir, uintptr_t start_addr, uintptr_t end_addr);
+static void dump_prefix_empty (uintptr_t start_addr);
+static void dump_db (uintptr_t addr, uint32_t dw);
 static void dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr);
+static pde_t *get_curenv_or_kernel_pgdir();
 
 #define DW_COUNT_PER_LINE  4 //show how many double worlds per line
 //4M page offset
@@ -39,9 +42,13 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Dispaly stack backtrace", mon_backtrace},
 	{ "showmappings", "Display virtual memory mapping", mon_showmappings },
 	{ "setptpermission", "Set page table permission", mon_setptpermission },
-	{ "dump", "Dump memory contents", mon_dump}
+	{ "dump", "Dump memory contents", mon_dump},
+	{ "continue", "Continue execution after breakpoint exception", mon_continue},
+	{ "freepageinfo", "Display free page info", mon_freepageinfo},
+	{ "ps", "Display env info", mon_ps}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -74,16 +81,36 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int 
+mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	if (tf) {
+		//env_pop_tf(tf); //not return
+		sched_yield();
+	}
+	else
+		cprintf("no breakpoint!\n");
+	return 0;
+}
+
+int 
+mon_freepageinfo(int argc, char **argv, struct Trapframe *tf)
+{
+	print_freepageinfo();
+	return 0;
+}
+
 int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 {
-	extern pde_t *kern_pgdir;
+	pde_t *kern_pgdir = get_curenv_or_kernel_pgdir();
 	//check parameters
 	if (argc != 3 && argc != 4) {
-		cprintf("usage: setptpermission virtual_addr permission or setptpermission start_virtual end_virtual permission\n");
+		cprintf("usage: setptpermission virtual_addr permission or setptpermission \
+		         start_virtual end_virtual permission\n");
 		return 0;
 	}
 	
-	intptr_t start_virtual = 0, end_virtual = 0;
+	uintptr_t start_virtual = 0, end_virtual = 0;
 	uint16_t permission = 0;
 	if (argc == 3) {
 		start_virtual = (int32_t) parse_str2int(argv[1]);
@@ -94,6 +121,11 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 		end_virtual = (int32_t) parse_str2int(argv[2]);
 		permission = (uint16_t)parse_str2int(argv[3]);
 	}
+	
+	if (curenv && curenv->env_status != ENV_FREE)
+		cprintf("set page table permission for env[%d].\n", curenv->env_id);
+	else 
+		cprintf("set page table permission for kernel.\n");
 	
 	int i,j,end_ptx;
 	for (i=PDX(start_virtual); i<=PDX(end_virtual); i++) {
@@ -108,7 +140,7 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 				end_ptx = PTX(end_virtual);
 			else
 				end_ptx = NPTENTRIES - 1;
-			intptr_t base_addr = i * PTSIZE;
+			uintptr_t base_addr = i * PTSIZE;
 			for (; j <= end_ptx; j++) {
 				pte_t *ptep = pgdir_walk(kern_pgdir, (void *)(base_addr + j * PGSIZE), 0);
 				if (!ptep || *ptep == 0) { //can't find page table, or the pte hasn't been mapped.  
@@ -120,36 +152,74 @@ int mon_setptpermission(int argc, char **argv, struct Trapframe *tf)
 		}
 	}
 	return 0;
+}	
+
+
+static int
+parse_args_for_showmappings(int argc, char  **argv, struct Env **env_store, 
+	pde_t **pgdir, uintptr_t *from_addr, uintptr_t *end_addr)
+{
+	assert(env_store);
+	assert(from_addr);
+	assert(end_addr);
+	if (argc != 3 && argc != 1 && argc != 5) {
+		return -1;
+	}
+	*env_store = curenv;
+	*from_addr = 0, *end_addr = 0xffffffff;
+	if (argc == 3) {
+		if (argv[1][0] == '-' && argv[1][1] == 'e' && argv[1][2] == 0) {
+			if (envid2env(parse_str2int(argv[2]), env_store, 0) < 0)
+				return -1;
+		} else {
+			*from_addr = (uintptr_t) parse_str2int(argv[1]);
+			*end_addr = (uintptr_t) parse_str2int(argv[2]);
+		}
+	} else if (argc == 5) {
+		if (envid2env(parse_str2int(argv[2]), env_store, 0) < 0)
+				return -1;
+		*from_addr = (uintptr_t) parse_str2int(argv[3]);
+		*end_addr = (uintptr_t) parse_str2int(argv[4]);
+	}
+	if (*env_store)
+		*pgdir = (*env_store)->env_pgdir;
+	else {
+		if (curenv)
+			*pgdir = curenv->env_pgdir;
+		else
+			*pgdir = kern_pgdir;
+	}
+	return 0;
 }
 
 int 
 mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 {
-	//check parameters
-	if (argc != 3 && argc != 1) {
-		cprintf("usage: showmappings or showmappings start_addr end_addr\n");
+	//parse parameters
+	uintptr_t from_addr, end_addr;
+	struct Env *env = NULL;
+	pde_t *pgdir = NULL;
+	if (parse_args_for_showmappings(argc, argv, &env, &pgdir, &from_addr, &end_addr) < 0) {
+		cprintf("usage: showmappings [-e env] or showmappings [-e env] start_addr end_addr\n");
 		return 0;
 	}
 	
-	intptr_t from_addr = 0, end_addr = 0xffffffff;
+	cprintf("from_addr = %08x, end_addr = %08x\n", from_addr, end_addr);
 	
-	if (argc == 3) {
-		from_addr = (intptr_t) parse_str2int(argv[1]);
-		end_addr = (intptr_t) parse_str2int(argv[2]);
-	} 
-	
-	//cprintf("from_addr = %x\n",from_addr);
-	//cprintf("end_addr = %x\n",end_addr);
-	extern pde_t *kern_pgdir;
+	if (env && env->env_status != ENV_FREE)
+		cprintf("env[%08x] page table mapping:\n", env->env_id);
+	else 
+		cprintf("kernel page table mapping:\n");
+		
 	int i,j;
 	for (i=PDX(from_addr); i<=PDX(end_addr); ) {
 		int start_pdx = i, end_pdx;
 		physaddr_t start_phys_addr = 0;
 		uint16_t pde_permission;
 		
-		if (kern_pgdir[i] & PTE_P) {
+		if (pgdir[i] & PTE_P) {
 			end_pdx = i;
-			pde_permission = kern_pgdir[i] & 0xfff;
+			pde_permission = pgdir[i] & 0xfff;
 		} else {
 			i++;
 			continue;
@@ -159,34 +229,43 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		//should be the same.
 		uint16_t pte_permission = 0;
 		for (j=i; j<=PDX(end_addr); j++) {
-			if ( (kern_pgdir[j] & PTE_P) && ((kern_pgdir[j] & 0xfff) == pde_permission)) {
+			if ( (pgdir[j] & PTE_P) && ((pgdir[j] & 0xfff) == pde_permission)) {
 				end_pdx = j;
 				
-				if (kern_pgdir[j] & PTE_PS) { //pde used as 4M page
+				if (pgdir[j] & PTE_PS) { //pde used as 4M page
 					if (j==i) {
-						start_phys_addr = kern_pgdir[j] & 0xffc00000;
+						start_phys_addr = pgdir[j] & 0xffc00000;
 						continue;
 					}
-					if (start_phys_addr + (j-i) * PTSIZE != (kern_pgdir[j] & 0xffc00000)) 
+					if (start_phys_addr + (j-i) * PTSIZE != (pgdir[j] & 0xffc00000)) 
 						break;
 				} else {
-					//check whether pte has the same permisson, and phys memory address should be continuous.
+					//check whether pte has the same permisson, and phys memory address
+					// should be continuous.
 					int k;
 					int is_goto_outer = 0;
 					for (k=0; k<NPTENTRIES; k++) {
-						pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
-						if (!(ptep & PTE_P)) {
+						pte_t ptep = *pgdir_walk(pgdir, (void *)(j * PTSIZE + k * PGSIZE), 0);
+
+						if (!ptep) {
 							is_goto_outer = 1;
+							//cprintf("not match for PTE_P!\n");
 							break;
 						}
+						
 						if (j == i && k == 0) {
 							pte_permission = ptep & 0xfff;
 							start_phys_addr = PTE_ADDR(ptep);
+							//cprintf("start_phys_addr = %8.8x\n",start_phys_addr);
 							continue;
 						}
+						
 						if ( ((ptep & 0xfff) != pte_permission) 
 							 || ((start_phys_addr+(j-i)*PTSIZE+k*PGSIZE) != PTE_ADDR(ptep))  ) {
+							//cprintf("start_phys_addr+(j-i)*PTSIZE+k*PGSIZE = %8.8x\n", start_phys_addr+(j-i)*PTSIZE+k*PGSIZE);
+							//cprintf("PTE_ADDR(ptep) = %8.8x\n",PTE_ADDR(ptep));
 							is_goto_outer = 1;
+							//cprintf("not match!\n");
 							break;
 						}
 					}
@@ -204,7 +283,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 		char permission_desc[10];
 		get_pte_permission_desc(pde_permission, permission_desc);
 		if (start_pdx < end_pdx) {
-			if (kern_pgdir[start_pdx] & PTE_PS) {
+			if (pgdir[start_pdx] & PTE_PS) {
 				cprintf("[%5.05x-%5.05x]  PDE[%3.03x-%3.03x] %s %5.05x-%5.05x\n", 
 						(uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
 						(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , 
@@ -224,7 +303,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 					(uint32_t)(start_phys_addr + (end_pdx-start_pdx+1) * PTSIZE - PGSIZE) >> PGSHIFT);
 			}
 		} else {
-			if (kern_pgdir[start_pdx] & PTE_PS) {
+			if (pgdir[start_pdx] & PTE_PS) {
 				cprintf("[%5.05x-%5.05x]  PDE[%3.03x] %s %5.05x\n", 
 						(uint32_t)(start_pdx * PTSIZE) >> PGSHIFT,
 						(uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , 
@@ -233,7 +312,7 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 			} else {
 				cprintf("[%5.05x-%5.05x]  PDE[%3.03x]     %s\n", (uint32_t)(start_pdx * PTSIZE) >> PGSHIFT
 						, (uint32_t)( (end_pdx + 1) * PTSIZE - PGSIZE) >> PGSHIFT , start_pdx, permission_desc);
-				show_pte_mappings(start_pdx, from_addr, end_addr);
+				show_pte_mappings(pgdir, start_pdx, from_addr, end_addr);
 			}
 		}
 	
@@ -242,47 +321,88 @@ mon_showmappings(int argc, char **argv, struct Trapframe *tf)
 	
 	return 0;
 }
+		
+static int
+parse_args_for_dump(int argc, char **argv, struct Env **env_store, pde_t **pgdir, int *use_virtual,
+ uintptr_t *start_addr, uintptr_t *end_addr)
+{
+	//parse arguments
+	if (argc != 3 && argc != 4 && argc != 5) {
+		return -1;
+	}
+	*use_virtual = 1;
+	
+	if (argc == 5) {
+		if (argv[1][0] == '-' && argv[1][1] == 'e' && argv[1][2] == 0) {
+			*use_virtual = 1;
+			if (envid2env(parse_str2int(argv[2]), env_store, 0) < 0)
+				return -1;
+			*start_addr = (uintptr_t)parse_str2int(argv[3]);
+			*end_addr = (uintptr_t)parse_str2int(argv[4]);
+		} else 
+			return -1;
+	}
+	else if (argc == 4) {
+		if (argv[1][0] == '-' && argv[1][1] == 'p' && argv[1][2] == 0) {
+			*use_virtual = 0;
+		} else if (argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0) {
+			*use_virtual = 1;
+		} else {
+			return -1;
+		}
+		*start_addr = (uintptr_t)parse_str2int(argv[2]);
+		*end_addr = (uintptr_t)parse_str2int(argv[3]);
+	} else {
+		*start_addr = (uintptr_t)parse_str2int(argv[1]);
+		*end_addr = (uintptr_t)parse_str2int(argv[2]);
+	}
+	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", *start_addr, *end_addr);
+	*end_addr -= 1;
+	
+	uint32_t mod = *start_addr % (uint32_t)4;
+	if (mod != 0)
+		*start_addr -= mod;
+    mod = *end_addr % (uint32_t)4;
+	if ( mod != 3)
+		*end_addr += (3 - mod);
+	
+	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", *start_addr, *end_addr);
+	
+	if (*env_store) 
+		*pgdir = (*env_store)->env_pgdir;
+	else {
+		if (curenv) {
+			*env_store = curenv;
+			*pgdir = curenv->env_pgdir;
+		} else 
+			*pgdir = kern_pgdir;
+	}
+	
+	return 0;
+}
 
 int 
 mon_dump(int argc, char **argv, struct Trapframe *tf)
 {
+	struct Env *env = NULL;
+	pde_t *pgdir = NULL;
+	int use_virtual = 1;
+	uintptr_t start_addr = 0, end_addr = 0;
+	
 	//parse arguments
-	if (argc != 3 && argc != 4) {
-		cprintf("usage: dump [-p|-v] start_addr end_addr\n");
+	if (parse_args_for_dump(argc, argv, &env, &pgdir, &use_virtual, &start_addr, &end_addr) < 0) {
+		cprintf("usage: dump [-p|-v|-e env] start_addr end_addr\n");
 		return 0;
 	}
 	
-	int use_virtual = 1;
-	intptr_t start_addr = 0, end_addr = 0;
-	
-	if (argc == 4) {
-		if (argv[1][0] == '-' && argv[1][1] == 'p' && argv[1][2] == 0) {
-			use_virtual = 0;
-		} else if (argv[1][0] == '-' && argv[1][1] == 'v' && argv[1][2] == 0) {
-			use_virtual = 1;
-		} else {
-			cprintf("usage: dump [-p|-v] start_addr end_addr\n");
-			return 0;
-		}
-		start_addr = (intptr_t)parse_str2int(argv[2]);
-		end_addr = (intptr_t)parse_str2int(argv[3]);
-	} else {
-		start_addr = (intptr_t)parse_str2int(argv[1]);
-		end_addr = (intptr_t)parse_str2int(argv[2]);
-	}
-	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
-	end_addr -= 1;
-	
-	uint32_t mod = start_addr % (uint32_t)4;
-	if (mod != 0)
-		start_addr -= mod;
-    mod = end_addr % (uint32_t)4;
-	if ( mod != 3)
-		end_addr += (3 - mod);
-	
-	cprintf("start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	if (env) 
+		cprintf("env [%08x] data:\n", env->env_id);
+	else
+		cprintf("kernel data:\n");
+	cprintf("pgdir = %08x\n", pgdir);
+	cprintf("virtual = %d\n", use_virtual);
 	if (use_virtual)
-		dump_virtual_mem(start_addr, end_addr);
+		dump_virtual_mem(pgdir, start_addr, end_addr);
 	else {
 		//check whether physaddr is valid
 		extern size_t npages;
@@ -294,47 +414,65 @@ mon_dump(int argc, char **argv, struct Trapframe *tf)
 		dump_phys_mem(start_addr, end_addr);
 	}
 	return 0;
-} 
+} 	
+
+int 
+mon_ps(int argc, char **argv, struct Trapframe *tf)
+{
+	int i;
+	cprintf("%8s    %8s    %16s\n", "ID", "PID", "STATUS");
+	for (i = 0; i < NENV; i++) {
+		if (envs[i].env_status)
+			cprintf("%08x    %8x    %16s\n", 
+					envs[i].env_id, 
+					envs[i].env_parent_id,
+					env_status_msg[envs[i].env_status]);
+	}
+	return 0;
+}	
 
 static void 
-dump_virtual_mem (intptr_t start_addr, intptr_t end_addr)
+dump_virtual_mem (pde_t *pgdir, uintptr_t start_addr, uintptr_t end_addr)
 {
-	intptr_t addr;
+	if (pgdir != kern_pgdir)
+		lcr3(PADDR(pgdir));
+	cprintf("pgdir = %08x\n", pgdir);
+	uintptr_t addr;
 	for (addr = start_addr; addr <= end_addr; addr = (PDX(addr)+1) * PTSIZE) {
 		int pdx = PDX(addr);
-		intptr_t base_addr = pdx * PTSIZE;
-		intptr_t pde_end_addr = (uint32_t)((pdx + 1) * PTSIZE - 1);
-		dump_virtual_mem_per_pde(addr, pde_end_addr < end_addr ? pde_end_addr : end_addr);
+		uintptr_t base_addr = pdx * PTSIZE;
+		uintptr_t pde_end_addr = (uint32_t)((pdx + 1) * PTSIZE - 1);
+		dump_virtual_mem_per_pde(pgdir, addr, pde_end_addr < end_addr ? pde_end_addr : end_addr);
 	}
 	cprintf("\n");
+	if (pgdir != kern_pgdir)
+		lcr3(PADDR(curenv->env_pgdir));
 }
 
 static void 
 dump_phys_mem (physaddr_t start_addr, physaddr_t end_addr)
 {
-	dump_virtual_mem(KERNBASE + start_addr, KERNBASE + end_addr);
+	dump_virtual_mem(kern_pgdir, KERNBASE + start_addr, KERNBASE + end_addr);
 }
-
 
 //dump memory contents for virtual address region [from_virtual, end_virtual].
 //NOTE: [from_virtual, end_virtual] should be the same pde
 static void 
-dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
+dump_virtual_mem_per_pde(pde_t *pgdir, uintptr_t start_addr, uintptr_t end_addr)
 {
 	cprintf("dump_virtual_mem_per_pde: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
 	int pdx = PDX(start_addr);
 	assert(start_addr < end_addr);
 	assert(end_addr < start_addr + PTSIZE);
 	
-	extern pde_t *kern_pgdir;
-	pde_t pde = kern_pgdir[pdx];
+	pde_t pde = pgdir[pdx];
 	
 	if (pde == 0) { //haven't mapped
 		cprintf("%8.08x-%8.08x: not mapped\n", start_addr, end_addr);
 		return;	
 	}
 
-	intptr_t base_addr = pdx * PTSIZE;
+	uintptr_t base_addr = pdx * PTSIZE;
 	if (pde & PTE_PS) {
 		if (pde & PTE_P) {
 			uint32_t start_offset = BIGPGOFF(start_addr), end_offset = BIGPGOFF(end_addr);
@@ -347,29 +485,42 @@ dump_virtual_mem_per_pde(intptr_t start_addr, intptr_t end_addr)
 			cprintf("[%8.08-%8.08x] page present bit is 0\n", start_addr, end_addr);
 		}
 	} else {
-		intptr_t addr = start_addr;
+		uintptr_t addr = start_addr;
+		dump_prefix_empty(start_addr);
 		for (; addr <= end_addr; addr = base_addr+ (PTX(addr) + 1) * PGSIZE) {
 			int ptx = PTX(addr);
-			intptr_t pte_end_addr = (uint32_t)(base_addr + (ptx + 1) * PGSIZE - 1);
-			dump_virtual_mem_per_pte(addr,  pte_end_addr < end_addr ? pte_end_addr : end_addr);
+			uintptr_t pte_end_addr = (uint32_t)(base_addr + (ptx + 1) * PGSIZE - 1);
+			dump_virtual_mem_per_pte(pgdir, addr,  pte_end_addr < end_addr ? pte_end_addr : end_addr);
 		}
 	}
 }
+
 
 //dump memory contents for virtual address region [start_addr, end_addr]. 
 //the arguments are virtual addresses.
 //NOTE: [from_virtual, end_virtual] should be in the same pte
 		
 static void 
-dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
+dump_virtual_mem_per_pte(pde_t *pgdir, uintptr_t start_addr, uintptr_t end_addr)
 {
 	cprintf("dump_virtual_mem_per_pte: start_addr = %8.08x, end_addr = %8.08x\n", start_addr, end_addr);
+	cprintf("pgdir = %08x\n", pgdir);
 	assert(start_addr % (uint32_t)4 == 0);
 	assert((uint32_t)(end_addr % (uint32_t)4) == 3);
-	int ptx = PTX(start_addr);
-	assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
-
-	intptr_t addr;
+	//int ptx = PTX(start_addr);
+	//cprintf("(ptx + 1) * PGSIZE - 1 = %8.8x\n",(ptx + 1) * PGSIZE - 1);
+	//cprintf("end_addr = %8.8x\n", end_addr);
+	//assert( (ptx + 1) * PGSIZE - 1 >= end_addr);
+	pte_t *ptep = NULL;
+	//page_lookup(kern_pgdir, (void *)start_addr, &ptep);
+	
+	if (!(ptep = pgdir_walk(pgdir, (void *)start_addr, 0)) 
+		|| !(*ptep & PTE_P)){
+		cprintf("%8.08x-%8.08x: not mapped\n", start_addr, end_addr);
+		return;
+	}
+	
+	uintptr_t addr;
 	for (addr = start_addr; addr <= end_addr; addr += 4) {
 		dump_db(addr, *(uint32_t *)addr);
 	}
@@ -377,24 +528,24 @@ dump_virtual_mem_per_pte(intptr_t start_addr, intptr_t end_addr)
 }
 
 static void 
-dump_prefix_empty (intptr_t start_addr)
+dump_prefix_empty (uintptr_t start_addr)
 {
 	assert(start_addr % (uint32_t)4 == 0);
 	uint32_t pos = start_addr / (uint32_t)4;
 	assert(start_addr % (uint32_t)4 == 0);
 	
 	if (pos % (uint32_t)DW_COUNT_PER_LINE > 0){
-		cprintf("%8.08x-%8.08x: ", start_addr, (uint32_t)(start_addr + DW_COUNT_PER_LINE * 4));
+		
 		int j;
 		uint32_t skiped_count = (pos % (uint32_t)DW_COUNT_PER_LINE);
-		
+		cprintf("%8.08x-%8.08x: ", start_addr - skiped_count * 4, (uint32_t)(start_addr - skiped_count * 4 + DW_COUNT_PER_LINE * 4));
 		for (j=0; j < skiped_count; j++)
 			cprintf("          "); //ten spaces
 	}
 }
 
 static void 
-dump_db (intptr_t addr, uint32_t dw) 
+dump_db (uintptr_t addr, uint32_t dw) 
 {
 	assert(addr % (uint32_t)4 == 0);
 	uint32_t pos = addr / (uint32_t)4;
@@ -410,7 +561,7 @@ dump_db (intptr_t addr, uint32_t dw)
 	}
 }
 
-static void
+void
 get_pte_permission_desc(uint16_t pte_permission, char *msg)
 {
 	snprintf(msg,
@@ -433,9 +584,8 @@ get_pte_permission_desc(uint16_t pte_permission, char *msg)
 //NOTE: 1. it's not 4M Page
 //      2. pdx memory region should have intersector with [from_virtual, end_virtual]
 static void
-show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual) 
+show_pte_mappings(pde_t *pgdir, int pdx, uintptr_t from_virtual, uintptr_t end_virtual) 
 {
-	extern pde_t *kern_pgdir;
 	uintptr_t base_addr = pdx * PTSIZE;
 	uint16_t pte_permission;
 	
@@ -455,7 +605,7 @@ show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual)
 		int start_ptx = k, end_ptx;
 		physaddr_t from_addr, end_addr;
 		
-		pte_t ptep = *pgdir_walk(kern_pgdir, (void *)(base_addr + k * PGSIZE), 0);
+		pte_t ptep = *pgdir_walk(pgdir, (void *)(base_addr + k * PGSIZE), 0);
 		
 		if (!ptep) {
 			k++;
@@ -467,13 +617,13 @@ show_pte_mappings(int pdx, intptr_t from_virtual, intptr_t end_virtual)
 		
 		int n;
 		for (n=k+1; n<NPTENTRIES && n <= max_k; n++) {
-			pte_t ptep2 = *pgdir_walk(kern_pgdir, (void *)(base_addr + n * PGSIZE), 0);
+			pte_t ptep2 = *pgdir_walk(pgdir, (void *)(base_addr + n * PGSIZE), 0);
 			if ( (ptep2 & 0xfff) != pte_permission )
 				break;
 		}
 		
 		end_ptx = n-1;
-		end_addr = PTE_ADDR(*pgdir_walk(kern_pgdir, (void *)(base_addr + end_ptx * PGSIZE), 0));
+		end_addr = PTE_ADDR(*pgdir_walk(pgdir, (void *)(base_addr + end_ptx * PGSIZE), 0));
 		//pte show format:
 		// [from_virtual-end_virtual] PTE[from_index-end_index] -------- from_phys-end_phys
 		char permission_desc[10];
@@ -539,7 +689,8 @@ atoi(char *str, int base)
 
 
 
-/* why mon_backtrace need the three arguments? */
+/* why mon_backtrace need the three arguments? because mon_* funcitons have the three function.
+ * they are the value of 'func' field of struct Command */
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
@@ -548,7 +699,8 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	unsigned int eip, last_ebp, arg1, arg2, arg3, arg4, arg5;
 	int start = 1; 
 	struct Eipdebuginfo eip_debug_info;
-	//read the last ebp, and if ebp doesn't equal 0, then print the information(ebp, eip, and so on).
+	//read the last ebp, and if ebp doesn't equal 0, then print 
+	//the information(ebp, eip, and so on).
 	do{
 		if (start) {
 			ebp = (unsigned int *)read_ebp();
@@ -565,7 +717,8 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 		arg5 = *(ebp + 6);
 		
 		//output format: ebp f0109e58  eip f0100a62  args 00000001 f0109e80 f0109e98 f0100ed2 00000031
-		cprintf("ebp %8.08x  eip %8.08x  args %8.08x %8.08x %8.08x %8.08x %8.08x\n",ebp,eip,arg1,arg2,arg3,arg4,arg5);
+		cprintf("ebp %8.08x  eip %8.08x  args %8.08x %8.08x %8.08x %8.08x %8.08x\n",
+				ebp,eip,arg1,arg2,arg3,arg4,arg5);
 		
 		if( debuginfo_eip(eip, &eip_debug_info) == 0 ){
 			//output format:        kern/monitor.c:143: monitor+106
@@ -577,6 +730,7 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 			cprintf("       can't find line info!\n");
 		}
 	} while (last_ebp != 0);
+	cprintf("mon_backtrace end!\n");
 	return 0;
 }
 
@@ -633,7 +787,9 @@ monitor(struct Trapframe *tf)
 
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
-	//mon_backtrace(0, 0, 0);
+
+	if (tf != NULL)
+		print_trapframe(tf);
 
 	while (1) {
 		buf = readline("K> ");
@@ -653,3 +809,13 @@ read_eip()
 	__asm __volatile("movl 4(%%ebp), %0" : "=r" (callerpc));
 	return callerpc;
 }
+
+static pde_t *
+get_curenv_or_kernel_pgdir()
+{
+	extern pde_t *kern_pgdir;
+	if (curenv && curenv->env_status != ENV_FREE)
+		return curenv->env_pgdir;
+	return kern_pgdir;
+}
+
