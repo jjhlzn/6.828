@@ -308,13 +308,14 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	
 		
 	if((perm & PTE_W) && !(*ptep & PTE_W)) {
+		/*
 		if (*ptep & PTE_COW) {
 			// kernel should cause a page_fualt exception for the env.
 			curenv->env_tf.tf_err = (FEC_U | FEC_WR | FEC_PR);
 			curenv->env_tf.tf_trapno = T_PGFLT;
 			curenv->env_tf.tf_eip = 0x801426;
 			user_page_fault_handler(&curenv->env_tf, (uintptr_t)srcva);
-		}
+		}*/
 		cprintf("invalid paramters3\n");
 		return -E_INVAL;
 	}

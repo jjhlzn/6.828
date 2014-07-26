@@ -97,6 +97,7 @@ KERN_BINFILES +=	user/testtime \
 			net/testinput \
 			net/testnetwork \
 			user/chatsrv \
+			user/kerngenerateuserpf \
 			net/ns
 
 KERN_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))

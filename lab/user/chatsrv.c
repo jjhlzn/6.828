@@ -72,6 +72,7 @@ send_to_all_members(char *buf, int size)
 void 
 recv_client_ipc()
 {
+	cprintf("[%08x]: I'm recv_client_ipc\n", thisenv->env_id);
     char *recv_msg;
     if (sys_page_alloc(0, (void *)UTEMP, PTE_P | PTE_U | PTE_W) < 0)
 		panic("sys_page_alloc return error");
@@ -79,10 +80,15 @@ recv_client_ipc()
 	envid_t who;
 	int size;
 	while (1) {
+		cprintf("[%08x]: wait for message\n", thisenv->env_id);
 		size = ipc_recv(&who, recv_msg, 0);
-		cprintf("message from %08x\n", who);
+		cprintf("message from %08x, size = %d\n", who, size);
+		if (size < 0) {
+			add_mem(-size);
+			continue;
+		}
 		asm volatile("int $3");
-		cprintf("recv_client_ipc: free_list_elems[0].member = %08x\n", free_list_elems[0].member);
+		cprintf("[%08x]: recv_client_ipc: free_list_elems[0].member = %08x\n", thisenv->env_id, free_list_elems[0].member);
 		send_to_all_members(recv_msg, size);
 	}
 }
@@ -194,15 +200,6 @@ umain(int argc, char **argv)
 	}
 	
 	cprintf("free_list_elems = %08x\n",free_list_elems);
-	//cancle page-on-write on free_list_elems
-	if (sys_page_map(0, free_list_elems, 0, 
-			free_list_elems, PTE_U | PTE_P | PTE_W) < 0)
-		panic("sys_page_map return error!");
-	if (sys_page_map(0, free_list_elems, recv_client_pid, 
-			free_list_elems, PTE_U | PTE_P) < 0)
-		panic("sys_page_map return error!");
-	free_list_elems[0].member = -1;
-
 	
 	// Run until canceled
 	while (1) {
@@ -220,12 +217,6 @@ umain(int argc, char **argv)
 		cprintf("clientsock = %d\n", clientsock);
 		if ((client_pid = fork()) < 0)
 			panic("fork error");
-		
-		if (client_pid > 0) {
-			add_mem(client_pid);
-			cprintf("!!!!!!srv: free_list_elems[0].member = %08x\n", free_list_elems[0].member);
-			asm volatile ("int $3");
-		}	
 			
 		if (client_pid == 0) {
 			cprintf("clientsock = %d\n", clientsock);
@@ -242,7 +233,7 @@ umain(int argc, char **argv)
 			receive_from_others(clientsock);
 			return;
 		}
-		
+		ipc_send(recv_client_pid, -client_pid, 0, 0);
 	}
 	close(serversock);
 }

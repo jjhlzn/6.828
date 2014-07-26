@@ -251,6 +251,9 @@ trap_dispatch(struct Trapframe *tf)
 			time_tick();
 			sched_yield();
 			break;
+		case IRQ_KBD + IRQ_OFFSET:
+			sched_yield();
+			break;
 		
 		case IRQ_OFFSET + IRQ_NETWORK:
 			//lapic_eoi(); //TODO: it seems the statement is useless.
@@ -404,8 +407,8 @@ page_fault_handler(struct Trapframe *tf)
 void 
 user_page_fault_handler(struct Trapframe *tf, uintptr_t fault_va)
 {
-	if (curenv->env_id == 0x0000100a)
-		print_trapframe(tf);
+	//if (curenv->env_id == 0x0000100a)
+	//	print_trapframe(tf);
 	if (curenv->env_pgfault_upcall) {
 		
 		int skip_bytes = 0;

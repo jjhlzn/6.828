@@ -27,10 +27,10 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	pte_t pte = vpt[(uint32_t)addr >> PGSHIFT];
 	if (!(err & FEC_WR))
-		panic("pgfault: not caused by write access, addr = %08x, err = %08x!", addr, err);
+		panic("[%08x]: pgfault: not caused by write access, addr = %08x, err = %08x!", thisenv->env_id, addr, err);
 	
 	if (!(pte & PTE_COW))
-		panic("pgfault: the page of 0x%08x is not PTE_COW, eip = %08x\n",addr, utf->utf_eip);
+		panic("[%08x]: pgfault: the page of 0x%08x is not PTE_COW, eip = %08x\n", thisenv->env_id, addr, utf->utf_eip);
 	
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
