@@ -301,6 +301,19 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 7: Your code here.
+	uintptr_t va;
+	uint32_t i;
+	for (i = 0; i < 0xffffffff / PGSIZE + 1; i++) {
+		pde_t pde = vpd[i / 1024];
+		if ((pde & PTE_P) && !(pde & PTE_PS)) { //4M page don't support PTE_SHARE
+			pte_t pte = vpt[i];
+			va = i * PGSIZE;
+			if (pte & PTE_SHARE)
+				if (sys_page_map(0, (void *)va, child, (void *)va, pte & PTE_SYSCALL))
+					panic("sys_page_map return error");
+		}
+	}
+		
 	return 0;
 }
 

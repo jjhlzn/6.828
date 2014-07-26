@@ -1,6 +1,7 @@
 // implement fork from user space
 
 #include <inc/string.h>
+#include <inc/memlayout.h>
 #include <inc/lib.h>
 
 // PTE_COW marks copy-on-write page table entries.
@@ -26,10 +27,10 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	pte_t pte = vpt[(uint32_t)addr >> PGSHIFT];
 	if (!(err & FEC_WR))
-		panic("[%08x]: pgfault: not caused by write access, addr = %08x, err = %08x!", thisenv->env_id, addr, err);
+		panic("not caused by write access, addr = %08x, eip = %08x, err = %08x!", addr, utf->utf_eip, err);
 	
 	if (!(pte & PTE_COW))
-		panic("[%08x]: pgfault: the page of 0x%08x is not PTE_COW, eip = %08x\n", thisenv->env_id, addr, utf->utf_eip);
+		panic("the page of 0x%08x is not PTE_COW, eip = %08x\n", addr, utf->utf_eip);
 	
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -83,22 +84,24 @@ duppage(envid_t envid, unsigned pn)
 	uintptr_t addr = pn * PGSIZE;
 	//cprintf("copy %08x page table mapping\n", addr);
 	pte_t pte = vpt[pn];
-	//cprintf("pte = %08x\n", pte);
-	if ((pte & PTE_W) || (pte & PTE_COW)) {
-		if (addr + PGSIZE == UXSTACKTOP)  //user exception stack is a except
-			return 0; 
-		//cprintf("writable \n");
+	
+	if (addr + PGSIZE == UXSTACKTOP)  //user exception stack is a except
+		return 0; 
+
+	if (pte & PTE_SHARE) {
+		if ((r = sys_page_map(0, (void *)addr, envid, (void *)addr, pte & PTE_SYSCALL) < 0))
+			panic("sys_page_map return eror - %e", r);
+	} else if ((pte & PTE_W) || (pte & PTE_COW)) {
 		if ((r = sys_page_map(0, (void *)addr, envid, (void *)addr, PTE_U | PTE_P | PTE_COW)) < 0)
-			panic("duppage: sys_page_map (map child) return error - %e", r);
-		//cprintf("map child done\n");
+			panic("sys_page_map (map child) return error - %e", r);
+			
 		if ((r = sys_page_map(0, (void *)addr, 0, (void *)addr, PTE_U | PTE_P | PTE_COW)) < 0)
-			panic("duppage: sys_page_map (map father) return error - %e", r);
+			panic("sys_page_map (map father) return error - %e", r);
 	} else {
 		//cprintf("read only \n");
 		if ((r = sys_page_map(0, (void *)addr, envid, (void *)addr, PTE_U | PTE_P)) < 0)
 			panic("duppage: sys_page_map (map child) return error - %e", r);
 	}
-	//cprintf("duppage done\n");
 	return 0;
 }
 
