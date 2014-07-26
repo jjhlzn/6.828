@@ -30,6 +30,7 @@ struct pci_driver pci_attach_class[] = {
 
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device
 struct pci_driver pci_attach_vendor[] = {
+	{ E1000_PCI_VENDOR, E1000_PCI_PRODUCT, &e1000_attach},
 	{ 0, 0, 0 },
 };
 
@@ -206,7 +207,7 @@ pci_func_enable(struct pci_func *f)
 		pci_conf_write(f, bar, 0xffffffff);
 		uint32_t rv = pci_conf_read(f, bar);
 
-		if (rv == 0)
+		if (rv == 0) 
 			continue;
 
 		int regnum = PCI_MAPREG_NUM(bar);

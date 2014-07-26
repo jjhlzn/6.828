@@ -94,6 +94,9 @@ KERN_BINFILES +=	user/testtime \
 			user/echotest \
 			net/testoutput \
 			net/testinput \
+			net/testnetwork \
+			user/chatsrv \
+			user/kerngenerateuserpf \
 			net/ns
 
 # Binary files for LAB7

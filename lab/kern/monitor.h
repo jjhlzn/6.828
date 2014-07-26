@@ -15,5 +15,12 @@ void monitor(struct Trapframe *tf);
 int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
+int mon_showmappings(int argc, char **argv, struct Trapframe *tf);
+int mon_setptpermission(int argc, char **argv, struct Trapframe *tf);
+int mon_dump(int argc, char **argv, struct Trapframe *tf);
+int mon_continue(int argc, char **argv, struct Trapframe *tf);
+int mon_freepageinfo(int argc, char **argv, struct Trapframe *tf);
+int mon_ps(int argc, char **argv, struct Trapframe *tf);
 
+void get_pte_permission_desc(uint16_t pte_permission, char *msg);
 #endif	// !JOS_KERN_MONITOR_H

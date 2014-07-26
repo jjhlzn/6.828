@@ -122,3 +122,21 @@ sys_time_msec(void)
 {
 	return (unsigned int) syscall(SYS_time_msec, 0, 0, 0, 0, 0, 0);
 }
+
+int 
+sys_net_send(void *buf, int len)
+{
+	return syscall(SYS_net_send, 1, (uint32_t)buf, len, 0, 0, 0);
+}
+
+int 
+sys_net_recv(void *buf, int bufsize, int *packet_size)
+{
+	return syscall(SYS_net_recv, 1, (uint32_t)buf, bufsize, (uint32_t)packet_size, 0, 0);
+}
+
+int
+sys_net_read_mac_addr(void *buf)
+{
+	return syscall(SYS_net_read_mac_addr, 1, (uint32_t)buf, 0, 0, 0, 0);
+}

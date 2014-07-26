@@ -38,6 +38,8 @@ enum {
 	ENV_NOT_RUNNABLE
 };
 
+extern char *env_status_msg[];
+
 // Special environment types
 enum EnvType {
 	ENV_TYPE_USER = 0,
@@ -68,6 +70,12 @@ struct Env {
 	uint32_t env_ipc_value;		// Data value sent to us
 	envid_t env_ipc_from;		// envid of the sender
 	int env_ipc_perm;		// Perm of page mapping received
+	
+	// Net
+	bool env_net_recving; // Env is blocked receiving
+	void *env_net_buf;    // Buf at which to store packet data
+	int env_net_buf_size; //Bug size
+	int *env_net_packet_size_store;
 };
 
 #endif // !JOS_INC_ENV_H

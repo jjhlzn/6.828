@@ -61,12 +61,13 @@ low_level_init(struct netif *netif)
     netif->flags = NETIF_FLAG_BROADCAST;
 
     // MAC address is hardcoded to eliminate a system call
-    netif->hwaddr[0] = 0x52;
-    netif->hwaddr[1] = 0x54;
-    netif->hwaddr[2] = 0x00;
-    netif->hwaddr[3] = 0x12;
-    netif->hwaddr[4] = 0x34;
-    netif->hwaddr[5] = 0x56;
+    //netif->hwaddr[0] = 0x52;
+    //netif->hwaddr[1] = 0x54;
+    //netif->hwaddr[2] = 0x00;
+    //netif->hwaddr[3] = 0x12;
+    //netif->hwaddr[4] = 0x34;
+    //netif->hwaddr[5] = 0x56;
+    sys_net_read_mac_addr(netif->hwaddr);
 }
 
 /*

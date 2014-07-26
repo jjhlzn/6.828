@@ -16,6 +16,7 @@
 #include <kern/spinlock.h>
 #include <kern/time.h>
 #include <kern/pci.h>
+#include <kern/e1000.h>
 
 static void boot_aps(void);
 
@@ -53,9 +54,24 @@ i386_init(void)
 	// Lab 6 hardware initialization functions
 	time_init();
 	pci_init();
+	
+	//test, send packet
+	/*
+	char msg[] = "hello                                           fsdfdsfdsfdsfdsfdsfdsfsdf";
+	int msg_len = strlen(msg);
+	msg[0] = 0x52;
+	msg[1] = 0x54;
+	msg[2] = 0x00;
+	msg[3] = 0x12;
+	msg[4] = 0x34;
+	msg[5] = 0x56;
+	int j;
+	for(j=0; j<2; j++)
+		e1000_tx((uint8_t *)msg, msg_len);*/
 
 	// Acquire the big kernel lock before waking up APs
 	// Your code here:
+	lock_kernel();
 
 	// Starting non-boot CPUs
 	boot_aps();
@@ -125,6 +141,9 @@ void
 mp_main(void)
 {
 	// We are in high EIP now, safe to switch to kern_pgdir 
+	uint32_t cr4 = rcr4();
+	cr4 |= (1<<4); //Open PSE
+	lcr4(cr4);
 	lcr3(PADDR(kern_pgdir));
 	cprintf("SMP: CPU %d starting\n", cpunum());
 
@@ -138,9 +157,11 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
+	lock_kernel();
+	sched_yield();
 
 	// Remove this after you finish Exercise 4
-	for (;;);
+	//for (;;);
 }
 
 /*

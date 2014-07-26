@@ -29,14 +29,53 @@ sched_yield(void)
 	// below to switch to this CPU's idle environment.
 
 	// LAB 4: Your code here.
+	struct Env *next_env = NULL;
+	int find_start_i = -1;
+	if (!curenv)
+		find_start_i = 0;
+	else 
+		find_start_i = (curenv - envs) + 1;
+		
+	//cprintf("find_sart_i = %d\n", find_start_i);
+	
+	int find_count;
+	for (find_count = 0, i = find_start_i; find_count < NENV - 1; i++, find_count++) {
+		i = i % NENV;
+		if (envs[i].env_status == ENV_RUNNABLE 
+		 && envs[i].env_type != ENV_TYPE_IDLE) {
+			next_env = envs + i;
+			break;
+		}
+	}
+	
+	if (next_env == NULL && curenv && curenv->env_status == ENV_RUNNING 
+			&& curenv->env_cpunum == thiscpu->cpu_id) 
+		next_env = curenv;
+		
+	if (next_env) 
+		env_run(next_env);  //not return
+	
+	//cprintf("not found next env\n");
 
 	// For debugging and testing purposes, if there are no
 	// runnable environments other than the idle environments,
 	// drop into the kernel monitor.
+	// NOTE: because of receive interrupt, we must jump into ENV_TYPE_IDLE.
+	// Otherwise, when there is no env running, and packet receive, but in
+	// kernel mode, we can't receive hardware interrupt.
+	// So, we check whether there is any env waiting for NIC receive interrupt.
+	// if no, we just run into kernel monitor, or we run idle. 
+	int env_net_recv = 0;
 	for (i = 0; i < NENV; i++) {
-		if (envs[i].env_type != ENV_TYPE_IDLE &&
-		    (envs[i].env_status == ENV_RUNNABLE ||
-		     envs[i].env_status == ENV_RUNNING))
+		if (envs[i].env_net_recving) {
+			env_net_recv = 1;
+			break;
+		}
+	}
+	
+	for (i = 0; i < NENV; i++) {
+		if ( (env_net_recv ? 1 : envs[i].env_type != ENV_TYPE_IDLE) &&
+		    (envs[i].env_status == ENV_RUNNABLE || envs[i].env_status == ENV_RUNNING))
 			break;
 	}
 	if (i == NENV) {

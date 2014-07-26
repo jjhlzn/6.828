@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/fd.h>
 #include <lwip/sockets.h>
 #include <lwip/inet.h>
 
@@ -48,6 +49,7 @@ die(char *m)
 static void
 req_free(struct http_request *req)
 {
+	printf("req->url: %08x, req->version: %08x\n", req->url, req->version);
 	free(req->url);
 	free(req->version);
 }
@@ -73,11 +75,17 @@ send_header(struct http_request *req, int code)
 	return 0;
 }
 
+#define SEND_DATA_BUF 1024
 static int
 send_data(struct http_request *req, int fd)
 {
 	// LAB 6: Your code here.
-	panic("send_data not implemented");
+	int r;
+	char buf[SEND_DATA_BUF];
+	while ((r = read(fd, buf, SEND_DATA_BUF)) > 0) {
+		write(req->sock, buf, r);
+	}
+	return r;
 }
 
 static int
@@ -203,10 +211,13 @@ send_error(struct http_request *req, int code)
 			       "\r\n"
 			       "<html><body><p>%d - %s</p></body></html>\r\n",
 			       e->code, e->msg, e->code, e->msg);
-
-	if (write(req->sock, buf, r) != r)
+	cprintf("%s\n", buf);
+	if (write(req->sock, buf, r) != r) {
+		cprintf("send_error: write return error\n");
 		return -1;
+	}
 
+	cprintf("send_error: write success\n");
 	return 0;
 }
 
@@ -223,7 +234,26 @@ send_file(struct http_request *req)
 	// set file_size to the size of the file
 
 	// LAB 6: Your code here.
-	panic("send_file not implemented");
+	cprintf("[%08x]: send_file: url %s\n", thisenv->env_id, req->url);
+	
+	if ((fd = open(req->url, O_RDONLY))< 0) {
+		cprintf("[%08x]: send_file: %s doesn't exist!\n", thisenv->env_id, req->url);
+		send_error(req, 404);
+		goto end;
+	}
+	
+	struct Stat statbuf;
+	if (stat(req->url, &statbuf) < 0) {
+		send_error(req, 404);
+		goto end;
+	}
+	
+	if (statbuf.st_isdir) {
+		send_error(req, 404);
+		goto end;
+	}
+	
+	file_size = statbuf.st_size;
 
 	if ((r = send_header(req, 200)) < 0)
 		goto end;
@@ -258,26 +288,33 @@ handle_client(int sock)
 		// Receive message
 		if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 			panic("failed to read");
-
+		cprintf("[%08x]: handle_client: receive a new message!\n", thisenv->env_id);
 		memset(req, 0, sizeof(req));
 
 		req->sock = sock;
 
 		r = http_request_parse(req, buffer);
-		if (r == -E_BAD_REQ)
+		if (r == -E_BAD_REQ) {
+			cprintf("[%08x]: handle_client: get a BAD request\n", thisenv->env_id);
 			send_error(req, 400);
+			cprintf("[%08x]: handle_client: send error finished\n", thisenv->env_id);
+		}
 		else if (r < 0)
 			panic("parse failed");
 		else
 			send_file(req);
-
-		req_free(req);
+		
+		cprintf("[%08x]: handle_client: try to free request\n", thisenv->env_id);
+		if (r != -E_BAD_REQ)
+			req_free(req);
+		cprintf("[%08x]: handle_client: finish free request\n", thisenv->env_id);
 
 		// no keep alive
 		break;
 	}
-
+	cprintf("[%08x]: handle_client: try to close sock\n", thisenv->env_id);
 	close(sock);
+	cprintf("[%08x]: handle_client: closed sock\n", thisenv->env_id);
 }
 
 void
