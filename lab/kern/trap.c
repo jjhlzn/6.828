@@ -251,10 +251,14 @@ trap_dispatch(struct Trapframe *tf)
 			time_tick();
 			sched_yield();
 			break;
-		case IRQ_KBD + IRQ_OFFSET:
+		case IRQ_OFFSET + IRQ_KBD:
+			kbd_intr();
 			sched_yield();
 			break;
-		
+		case IRQ_OFFSET + IRQ_SERIAL:
+			serial_intr();
+			sched_yield();
+			break;
 		case IRQ_OFFSET + IRQ_NETWORK:
 			//lapic_eoi(); //TODO: it seems the statement is useless.
 			irq_eoi();
