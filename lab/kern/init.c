@@ -35,8 +35,6 @@ i386_init(void)
 	// Can't call cprintf until after we do this!
 	cons_init();
 
-	cprintf("6828 decimal is %o octal!\n", 6828);
-
 	// Lab 2 memory management initialization functions
 	mem_init();
 
@@ -54,20 +52,6 @@ i386_init(void)
 	// Lab 6 hardware initialization functions
 	time_init();
 	pci_init();
-	
-	//test, send packet
-	/*
-	char msg[] = "hello                                           fsdfdsfdsfdsfdsfdsfdsfsdf";
-	int msg_len = strlen(msg);
-	msg[0] = 0x52;
-	msg[1] = 0x54;
-	msg[2] = 0x00;
-	msg[3] = 0x12;
-	msg[4] = 0x34;
-	msg[5] = 0x56;
-	int j;
-	for(j=0; j<2; j++)
-		e1000_tx((uint8_t *)msg, msg_len);*/
 
 	// Acquire the big kernel lock before waking up APs
 	// Your code here:

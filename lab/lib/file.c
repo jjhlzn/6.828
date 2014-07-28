@@ -91,7 +91,7 @@ open(const char *path, int mode)
 			cprintf("open: fd_close fail!\n");
 		return r;
 	}
-	cprintf("%d, %d, %d\n", fd->fd_dev_id, fd->fd_offset, fd->fd_omode);
+	//cprintf("%d, %d, %d\n", fd->fd_dev_id, fd->fd_offset, fd->fd_omode);
 
 	return fd2num(fd);
 }

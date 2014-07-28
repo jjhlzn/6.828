@@ -225,7 +225,7 @@ e1000_rx_init()
     reg_data |= E1000_IMS_LSC;
     pcibar0w(IMS, reg_data);
     //pcibar0w(ICS, reg_data);
-    cprintf("IMS = %08x\n", pcibar0r(IMS));
+    //cprintf("IMS = %08x\n", pcibar0r(IMS));
     //cprintf("ICS = %08x\n", pcibar0r(ICS));
     //cprintf("IMS = %08x\n", pcibar0r(IMS));
     // TODO: Set TIDV, TADV, RADV, IDTR registers
@@ -308,7 +308,7 @@ e1000_attach(struct pci_func *pcif)
 	pci_bar0 = (uint32_t *)PCI_BAR0;
 	
 	uint32_t device_status = pcibar0r(E1000_STATUS/4);
-	cprintf("device_status = %08x\n", device_status);
+	//cprintf("device_status = %08x\n", device_status);
 	
 	//set interrupt
 	irq_mask_8259A &= ~(1 << pcif->irq_line);
@@ -376,7 +376,7 @@ e1000_rx(uint8_t *buf, int bufsize, int *packet_size)
 		hexdump("e1000_rx input:", buf, *packet_size > bufsize ? bufsize : *packet_size);
 	}
 	//update rdt
-	cprintf("rdh = %d, rdt = %d\n", pcibar0r(RDH), recv_index);
+	//cprintf("rdh = %d, rdt = %d\n", pcibar0r(RDH), recv_index);
 	pcibar0w(RDT, recv_index);
 	return 0;
 } 
@@ -385,7 +385,7 @@ void
 e1000_interrupt_handler()
 {
 	// Check if there any environment is suspended by empty receiver buffer
-	cprintf("interrupt!!!!\n");
+	//cprintf("interrupt!!!!\n");
 	pcibar0r(ICR);
 
 	if (!suspend_env) {

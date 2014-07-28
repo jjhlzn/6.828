@@ -12,6 +12,8 @@
 #define IDE_DF		0x20
 #define IDE_ERR		0x01
 
+#define debug 0
+
 static int diskno = 1;
 
 static int
@@ -46,8 +48,9 @@ ide_probe_disk1(void)
 
 	// switch back to Device 0
 	outb(0x1F6, 0xE0 | (0<<4));
-
-	cprintf("Device 1 presence: %d\n", (x < 1000));
+	
+	if (debug)
+		cprintf("Device 1 presence: %d\n", (x < 1000));
 	return (x < 1000);
 }
 

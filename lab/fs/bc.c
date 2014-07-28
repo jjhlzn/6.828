@@ -1,6 +1,7 @@
 
 #include "fs.h"
 
+#define debug 0
 // Return the virtual address of this disk block.
 void*
 diskaddr(uint32_t blockno)
@@ -89,7 +90,7 @@ flush_block(void *addr)
 	// LAB 5: Your code here.
 	
 	int r;
-	if (((uintptr_t)addr % PGSIZE) > 4093)
+	if (((uintptr_t)addr % 4) != 0)  //addr should align with 4
 		panic("addr has prolem: addr %08x", addr);
 		
 	if (!va_is_mapped(addr) || !va_is_dirty(addr))
@@ -98,9 +99,10 @@ flush_block(void *addr)
 	if ((r = ide_write(blockno * BLKSECTS, ROUNDDOWN(addr, PGSIZE), BLKSECTS)) < 0)
 		panic("ide_write failed: secno %08x, src %08x, nsecs %08x",
 			blockno * BLKSECTS, ROUNDDOWN(addr, PGSIZE), BLKSECTS);
-			
+	
+	pte_t pte = vpt[(uintptr_t)addr / PGSIZE];
 	if ((r = sys_page_map(0, ROUNDDOWN(addr, PGSIZE), 0, ROUNDDOWN(addr, PGSIZE),
-			PTE_SYSCALL)) < 0)
+			pte & PTE_SYSCALL)) < 0)
 		panic("sys_page_map failed");
 }
 
@@ -131,7 +133,8 @@ check_bc(void)
 	memmove(diskaddr(1), &backup, sizeof backup);
 	flush_block(diskaddr(1));
 
-	cprintf("block cache is good\n");
+	if (debug)
+		cprintf("block cache is good\n");
 }
 
 void

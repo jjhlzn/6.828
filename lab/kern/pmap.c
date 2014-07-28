@@ -226,7 +226,7 @@ mem_init(void)
 	// Your code goes here:
 	//TODO: Why two pieces? it will affect the mapping? 
 	extern char bootstack[];
-	cprintf("bootstack = %8.8x\n",bootstack);
+	//cprintf("bootstack = %8.8x\n",bootstack);
 	uintptr_t kern_stack_addr = KSTACKTOP-KSTKSIZE;
 	for (i=0; kern_stack_addr < KSTACKTOP; i++, kern_stack_addr += PGSIZE) {
 		//cprintf("i = %d\n",i);
@@ -390,12 +390,12 @@ page_init(void)
 	
 	//MPENTRY_PADDR
 	extern unsigned char mpentry_start[], mpentry_end[];
-	cprintf("mpentry_start = %8.8x, mpentry_end = %8.8x\n", 
-			mpentry_start, mpentry_end);
+	//cprintf("mpentry_start = %8.8x, mpentry_end = %8.8x\n", 
+	//		mpentry_start, mpentry_end);
 	start_addr = MPENTRY_PADDR;
 	end_addr = start_addr + (uint32_t)(mpentry_end - mpentry_start);
-	cprintf("start_addr = %8.8x, end_addr = %8.8x\n", 
-			start_addr, end_addr);
+	//cprintf("start_addr = %8.8x, end_addr = %8.8x\n", 
+	//		start_addr, end_addr);
 	set_used_pages(start_addr, end_addr);
 	
 	//IO hole [IOPHYSMEM, EXTPHYSMEM)
@@ -917,7 +917,7 @@ check_page_alloc(void)
 		--nfree;
 	assert(nfree == 0);
 
-	cprintf("check_page_alloc() succeeded!\n");
+	//cprintf("check_page_alloc() succeeded!\n");
 }
 
 //
@@ -983,7 +983,7 @@ check_kern_pgdir(void)
 			break;
 		}
 	}
-	cprintf("check_kern_pgdir() succeeded!\n");
+	//cprintf("check_kern_pgdir() succeeded!\n");
 }
 
 // This function returns the physical address of the page containing 'va',
@@ -1152,7 +1152,7 @@ check_page(void)
 	page_free(pp1);
 	page_free(pp2);
 
-	cprintf("check_page() succeeded!\n");
+	//cprintf("check_page() succeeded!\n");
 }
 
 // check page_insert, page_remove, &c, with an installed kern_pgdir
@@ -1194,7 +1194,7 @@ check_page_installed_pgdir(void)
 	// free the pages we took
 	page_free(pp0);
 
-	cprintf("check_page_installed_pgdir() succeeded!\n");
+	//cprintf("check_page_installed_pgdir() succeeded!\n");
 }
 
 void 
