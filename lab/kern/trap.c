@@ -18,6 +18,8 @@
 #include <kern/e1000.h>
 
 void user_page_fault_handler(struct Trapframe *tf, uintptr_t fault_va);
+static void debug_exception_handler(struct Trapframe *tf);
+static void breakpoint_exception_handler(struct Trapframe *);
 
 static struct Taskstate ts;
 
@@ -221,6 +223,9 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 	switch (tf->tf_trapno) {
+		case T_DEBUG:
+			debug_exception_handler(tf);
+			break;
 		case T_PGFLT:
 			page_fault_handler(tf);
 			break;
@@ -472,8 +477,14 @@ user_page_fault_handler(struct Trapframe *tf, uintptr_t fault_va)
 	}
 }
 
-void 
+static void 
 breakpoint_exception_handler(struct Trapframe *tf)
+{
+	monitor(tf);
+}
+
+static void 
+debug_exception_handler(struct Trapframe *tf)
 {
 	monitor(tf);
 }

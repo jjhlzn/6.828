@@ -48,7 +48,8 @@ static struct Command commands[] = {
 	{ "dump", "Dump memory contents", mon_dump},
 	{ "continue", "Continue execution after breakpoint exception", mon_continue},
 	{ "freepageinfo", "Display free page info", mon_freepageinfo},
-	{ "ps", "Display env info", mon_ps}
+	{ "ps", "Display env info", mon_ps},
+	{ "ss", "Single step execution", mon_singlestep}
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -86,6 +87,7 @@ mon_continue(int argc, char **argv, struct Trapframe *tf)
 {
 	if (tf) {
 		//env_pop_tf(tf); //not return
+		tf->tf_eflags &= ~FL_TF;
 		sched_yield();
 	}
 	else
@@ -430,6 +432,14 @@ mon_ps(int argc, char **argv, struct Trapframe *tf)
 	}
 	return 0;
 }	
+
+int mon_singlestep(int argc, char **argv, struct Trapframe *tf)
+{
+	if (tf != NULL)
+		tf->tf_eflags |= FL_TF;
+	sched_yield(); //not return
+	return 0;
+}
 
 static void 
 dump_virtual_mem (pde_t *pgdir, uintptr_t start_addr, uintptr_t end_addr)
