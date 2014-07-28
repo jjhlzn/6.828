@@ -98,8 +98,7 @@ duppage(envid_t envid, unsigned pn)
 		if ((r = sys_page_map(0, (void *)addr, 0, (void *)addr, PTE_U | PTE_P | PTE_COW)) < 0)
 			panic("sys_page_map (map father) return error - %e", r);
 	} else {
-		//cprintf("read only \n");
-		if ((r = sys_page_map(0, (void *)addr, envid, (void *)addr, PTE_U | PTE_P)) < 0)
+		if ((r = sys_page_map(0, (void *)addr, envid, (void *)addr, pte & PTE_SYSCALL)) < 0)
 			panic("duppage: sys_page_map (map child) return error - %e", r);
 	}
 	return 0;
